@@ -1,4 +1,4 @@
-import { DID, getDateFromUnixTimestamp, Id, SchemaHash } from '@iden3/js-iden3-core';
+import { DID, getDateFromUnixTimestamp, Id, SchemaHash } from '@uptickproject/js-iden3-core';
 import { DocumentLoader, Merklizer, MtValue, Path } from '@iden3/js-jsonld-merklization';
 import { Proof } from '@iden3/js-merkletree';
 import { byteEncoder } from '../../utils';

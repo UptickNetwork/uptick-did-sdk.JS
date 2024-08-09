@@ -1,4 +1,4 @@
-import { Id, Claim } from '@iden3/js-iden3-core';
+import { Id, Claim } from '@uptickproject/js-iden3-core';
 import { Signature } from '@iden3/js-crypto';
 import { Query, ValueProof, CircuitError, ClaimWithSigProof, TreeState, GISTProof } from './models';
 import { Hash, Proof } from '@iden3/js-merkletree';

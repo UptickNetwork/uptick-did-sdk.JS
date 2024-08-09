@@ -2,7 +2,7 @@ import { RevocationStatus, CredentialStatus } from '../../verifiable';
 import { EthConnectionConfig } from '../../storage/blockchain';
 import { CredentialStatusResolver, CredentialStatusResolveOptions } from './resolver';
 import { OnChainRevocationStorage } from '../../storage/blockchain/onchain-revocation';
-import { DID, Id, getChainId } from '@iden3/js-iden3-core';
+import { DID, Id, getChainId } from '@uptickproject/js-iden3-core';
 import { VerifiableConstants } from '../../verifiable/constants';
 import { isGenesisState } from '../../utils';
 import { EthStateStorage } from '../../storage/blockchain/state';

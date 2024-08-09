@@ -11,7 +11,7 @@ import {
   Id,
   NetworkId,
   SchemaHash
-} from '@iden3/js-iden3-core';
+} from '@uptickproject/js-iden3-core';
 import {
   poseidon,
   PublicKey,
@@ -970,7 +970,13 @@ export class IdentityWallet implements IIdentityWallet {
 
     const loader = opts?.documentLoader ?? cacheLoader(opts);
     try {
-      schema = (await loader(req.credentialSchema)).document;
+      let url=req.credentialSchema;
+      if (url != undefined && url != '') {
+        url = url.replace("https://raw.githubusercontent.com/iden3/claim-schema-vocab/main", "https://iden3-json.uptick.network");
+      } else {
+        url = ''
+      }
+      schema = (await loader(url)).document;
     } catch (e) {
       throw new Error(`can't load credential schema ${req.credentialSchema}`);
     }

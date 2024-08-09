@@ -7,7 +7,7 @@ import {
 } from './constants';
 import { TreeState } from '../circuits';
 import { Hex, Signature } from '@iden3/js-crypto';
-import { Claim, DID } from '@iden3/js-iden3-core';
+import { Claim, DID } from '@uptickproject/js-iden3-core';
 import { JSONObject } from '../iden3comm';
 
 /**

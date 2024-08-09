@@ -10,7 +10,7 @@ import {
   buildDIDType,
   idenState,
   getDateFromUnixTimestamp
-} from '@iden3/js-iden3-core';
+} from '@uptickproject/js-iden3-core';
 import {
   Hash,
   hashElems,

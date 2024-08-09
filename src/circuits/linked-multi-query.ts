@@ -1,4 +1,4 @@
-import { Claim } from '@iden3/js-iden3-core';
+import { Claim } from '@uptickproject/js-iden3-core';
 import { Proof } from '@iden3/js-merkletree';
 import { byteDecoder, byteEncoder } from '../utils';
 import {

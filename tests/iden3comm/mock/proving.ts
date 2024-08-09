@@ -1,6 +1,6 @@
 import { CircuitId } from './../../../src/circuits/models';
 import { ProvingMethod, ProvingMethodAlg, ZKProof, proving } from '@iden3/js-jwz';
-import { DID } from '@iden3/js-iden3-core';
+import { DID } from '@uptickproject/js-iden3-core';
 import { Eddsa } from '@iden3/js-crypto';
 import { newBigIntFromBytes } from '@iden3/js-merkletree';
 import {

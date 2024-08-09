@@ -10,7 +10,7 @@ export * from './circuits';
 export * from './iden3comm';
 export * from './utils';
 export * from './blockchain';
-import * as core from '@iden3/js-iden3-core';
+import * as core from '@uptickproject/js-iden3-core';
 import * as jsonLDMerklizer from '@iden3/js-jsonld-merklization';
 export { core };
 export { jsonLDMerklizer };

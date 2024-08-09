@@ -3,7 +3,7 @@ import {
   DID,
   MerklizedRootPosition,
   getDateFromUnixTimestamp
-} from '@iden3/js-iden3-core';
+} from '@uptickproject/js-iden3-core';
 import {
   AuthV2Inputs,
   AuthV2PubSignals,
@@ -443,7 +443,13 @@ export class ProofService implements IProofService {
     const loader = getDocumentLoader(this._ldOptions);
     let ldSchema: object;
     try {
-      ldSchema = (await loader(context)).document;
+      let url=context;
+      if (url != undefined && url != '') {
+        url = url.replace("https://raw.githubusercontent.com/iden3/claim-schema-vocab/main", "https://iden3-json.uptick.network");
+      } else {
+        url = ''
+      }
+      ldSchema = (await loader(url)).document;
     } catch (e) {
       throw new Error(`can't load ld context from url ${context}`);
     }

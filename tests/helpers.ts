@@ -1,4 +1,4 @@
-import { Blockchain, DidMethod, NetworkId } from '@iden3/js-iden3-core';
+import { Blockchain, DidMethod, NetworkId } from '@uptickproject/js-iden3-core';
 import {
   AuthDataPrepareFunc,
   BjjProvider,

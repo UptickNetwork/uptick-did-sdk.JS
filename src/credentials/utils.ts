@@ -1,4 +1,4 @@
-import { DID } from '@iden3/js-iden3-core';
+import { DID } from '@uptickproject/js-iden3-core';
 import { W3CCredential } from '../verifiable';
 import { PublicKey } from '@iden3/js-crypto';
 import { KmsKeyId, KmsKeyType, keyPath } from '../kms';

@@ -6,7 +6,7 @@ import {
 } from '../../src/iden3comm/index';
 import { mockPrepareAuthInputs, mockVerifyState, ProvingMethodGroth16Authv2 } from './mock/proving';
 import { proving, ProvingMethodAlg, ProvingMethod } from '@iden3/js-jwz';
-import { DID } from '@iden3/js-iden3-core';
+import { DID } from '@uptickproject/js-iden3-core';
 import {
   CredentialFetchRequestMessage,
   ProvingParams,

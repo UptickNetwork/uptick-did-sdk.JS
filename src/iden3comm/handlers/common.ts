@@ -7,7 +7,7 @@ import {
 } from '../types';
 import { mergeObjects } from '../../utils';
 import { RevocationStatus, W3CCredential } from '../../verifiable';
-import { DID } from '@iden3/js-iden3-core';
+import { DID } from '@uptickproject/js-iden3-core';
 import { IProofService } from '../../proof';
 import { CircuitId } from '../../circuits';
 import { MediaType } from '../constants';

@@ -12,7 +12,7 @@ import {
   ZeroKnowledgeProofRequest,
   JSONObject
 } from '../types';
-import { DID } from '@iden3/js-iden3-core';
+import { DID } from '@uptickproject/js-iden3-core';
 import { proving } from '@iden3/js-jwz';
 
 import * as uuid from 'uuid';

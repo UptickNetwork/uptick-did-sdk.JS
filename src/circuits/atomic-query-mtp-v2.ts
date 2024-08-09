@@ -1,4 +1,4 @@
-import { Id, SchemaHash } from '@iden3/js-iden3-core';
+import { Id, SchemaHash } from '@uptickproject/js-iden3-core';
 import { Query, ClaimWithMTPProof, ValueProof, CircuitError } from './models';
 import { Hash } from '@iden3/js-merkletree';
 import {

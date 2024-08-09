@@ -44,7 +44,7 @@ import {
   VerifiableConstants
 } from '../../src';
 import { ProvingMethodAlg, Token } from '@iden3/js-jwz';
-import { Blockchain, DID, DidMethod, NetworkId } from '@iden3/js-iden3-core';
+import { Blockchain, DID, DidMethod, NetworkId } from '@uptickproject/js-iden3-core';
 import { expect } from 'chai';
 import { ethers } from 'ethers';
 import * as uuid from 'uuid';

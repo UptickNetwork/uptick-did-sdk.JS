@@ -1,5 +1,5 @@
 import { poseidon } from '@iden3/js-crypto';
-import { SchemaHash } from '@iden3/js-iden3-core';
+import { SchemaHash } from '@uptickproject/js-iden3-core';
 import { defaultValueArraySize, prepareCircuitArrayValues } from '../../circuits';
 
 export function calculateQueryHashV2(

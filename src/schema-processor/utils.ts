@@ -1,4 +1,4 @@
-import { BytesHelper, checkBigIntInField, SchemaHash } from '@iden3/js-iden3-core';
+import { BytesHelper, checkBigIntInField, SchemaHash } from '@uptickproject/js-iden3-core';
 import { Merklizer } from '@iden3/js-jsonld-merklization';
 import { calculateCoreSchemaHash, fillCoreClaimSlot } from '../verifiable';
 

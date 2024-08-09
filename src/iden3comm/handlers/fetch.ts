@@ -16,7 +16,7 @@ import { ICredentialWallet, getUserDIDFromCredential } from '../../credentials';
 
 import { byteDecoder, byteEncoder } from '../../utils';
 import { proving } from '@iden3/js-jwz';
-import { DID } from '@iden3/js-iden3-core';
+import { DID } from '@uptickproject/js-iden3-core';
 import * as uuid from 'uuid';
 import { AbstractMessageHandler, IProtocolMessageHandler } from './message-handler';
 

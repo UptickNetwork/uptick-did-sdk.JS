@@ -1,5 +1,5 @@
 import { poseidon } from '@iden3/js-crypto';
-import { Id } from '@iden3/js-iden3-core';
+import { Id } from '@uptickproject/js-iden3-core';
 import { hashElems, Hash, ZERO_HASH } from '@iden3/js-merkletree';
 import { getProperties, TreeState } from '../../src/circuits';
 

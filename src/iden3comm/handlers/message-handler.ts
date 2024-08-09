@@ -5,7 +5,7 @@ import { ContractMessageHandlerOptions } from './contract-request';
 import { PaymentHandlerOptions, PaymentRequestMessageHandlerOptions } from './payment';
 import { MediaType } from '../constants';
 import { proving } from '@iden3/js-jwz';
-import { DID } from '@iden3/js-iden3-core';
+import { DID } from '@uptickproject/js-iden3-core';
 /**
  * iden3  Protocol message handler interface
  */

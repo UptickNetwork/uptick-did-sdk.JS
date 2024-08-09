@@ -10,7 +10,7 @@ import {
   BjjProvider
 } from '../../src';
 import { getRandomBytes } from '@iden3/js-crypto';
-import { BytesHelper, Constants } from '@iden3/js-iden3-core';
+import { BytesHelper, Constants } from '@uptickproject/js-iden3-core';
 
 const testFlow = async (provider: IKeyProvider) => {
   const seed1 = getRandomBytes(32);
