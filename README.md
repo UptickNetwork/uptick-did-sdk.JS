@@ -1,13 +1,13 @@
-# Polygon ID JS SDK
+# Uptick ID JS SDK
 
-SDK to work with Polygon ID using JavaScript and TypeScript languages.
+SDK to work with Uptick ID using JavaScript and TypeScript languages.
 
 ## Usage
 
 Installation:
 
 ```bash
-npm install @0xpolygonid/js-sdk
+npm install @uptickproject/js-sdk
 ```
 
 ## Circuits
@@ -61,11 +61,8 @@ Please see [examples](https://github.com/0xPolygonID/js-sdk-examples) for visit 
         npm run doc:watch:website
     ```
 
-Documentation can be found [here](https://0xpolygonid.github.io/js-sdk-tutorials/)
 
 ## License
-
-js-sdk is part of the 0xPolygonID project copyright 2024 ZKID Labs AG
 
 This project is licensed under either of
 
