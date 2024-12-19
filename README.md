@@ -39,9 +39,6 @@ export STATE_CONTRACT_ADDRESS="state contract address"
 export RHS_CONTRACT_ADDRESS="reverse hash service contract address"
 ```
 
-## Examples
-
-Please see [examples](https://github.com/0xPolygonID/js-sdk-examples) for visit examples information.
 
 ## Documentation
 
