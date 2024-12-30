@@ -1,8 +1,8 @@
 import * as path from 'path';
 import {
-	Extractor,
-	ExtractorConfig,
-	ExtractorResult
+    Extractor,
+    ExtractorConfig,
+    ExtractorResult
 } from '@microsoft/api-extractor';
 
 const apiExtractorJsonPath: string = path.join(__dirname, '../config/api-extractor.json');
@@ -12,18 +12,18 @@ const extractorConfig: ExtractorConfig = ExtractorConfig.loadFileAndPrepare(apiE
 
 // Invoke API Extractor
 const extractorResult: ExtractorResult = Extractor.invoke(extractorConfig, {
-	// Equivalent to the "--local" command-line parameter
-	localBuild: true,
+    // Equivalent to the "--local" command-line parameter
+    localBuild: true,
 
-	// Equivalent to the "--verbose" command-line parameter
-	showVerboseMessages: true
+    // Equivalent to the "--verbose" command-line parameter
+    showVerboseMessages: true
 });
 
 if (extractorResult.succeeded) {
-	console.log(`API Extractor completed successfully`);
-	process.exitCode = 0;
+    console.log(`API Extractor completed successfully`);
+    process.exitCode = 0;
 } else {
-	console.error(`API Extractor completed with ${extractorResult.errorCount} errors`
-		+ ` and ${extractorResult.warningCount} warnings`);
-	process.exitCode = 1;
+    console.error(`API Extractor completed with ${extractorResult.errorCount} errors`
+        + ` and ${extractorResult.warningCount} warnings`);
+    process.exitCode = 1;
 }
