@@ -1,143 +1,143 @@
-import {readdir, createReadStream, writeFile} from 'fs-extra'
-import {createInterface} from 'readline'
-import {join, parse} from 'path'
-import {exec} from 'child_process'
+import { readdir, createReadStream, writeFile } from 'fs-extra'
+import { createInterface } from 'readline'
+import { join, parse } from 'path'
+import { exec } from 'child_process'
 import * as fs from 'fs'
 import * as path from 'path';
 import chokidar from 'chokidar';
 import {
-    Extractor,
-    ExtractorConfig,
-    ExtractorResult
+	Extractor,
+	ExtractorConfig,
+	ExtractorResult
 } from '@microsoft/api-extractor';
 
 const DOCS_DIR = '../js-sdk-tutorials/docs/api';
 
 async function main() {
-    const apiExtractorJsonPath: string = path.join(__dirname, '../config/api-extractor.json');
+	const apiExtractorJsonPath: string = path.join(__dirname, '../config/api-extractor.json');
 
 // Load and parse the api-extractor.json file
-    const extractorConfig: ExtractorConfig = ExtractorConfig.loadFileAndPrepare(apiExtractorJsonPath);
+	const extractorConfig: ExtractorConfig = ExtractorConfig.loadFileAndPrepare(apiExtractorJsonPath);
 
 // Invoke API Extractor
-    const extractorResult: ExtractorResult = Extractor.invoke(extractorConfig, {
-        // Equivalent to the "--local" command-line parameter
-        localBuild: true,
+	const extractorResult: ExtractorResult = Extractor.invoke(extractorConfig, {
+		// Equivalent to the "--local" command-line parameter
+		localBuild: true,
+		
+		// Equivalent to the "--verbose" command-line parameter
+		showVerboseMessages: true
+	});
+	
+	if (extractorResult.succeeded) {
+		console.log(`API Extractor completed successfully`);
+		process.exitCode = 0;
+	} else {
+		console.error(`API Extractor completed with ${extractorResult.errorCount} errors`
+			+ ` and ${extractorResult.warningCount} warnings`);
+		process.exitCode = 1;
+	}
+	const outputFolder = './temp';
 
-        // Equivalent to the "--verbose" command-line parameter
-        showVerboseMessages: true
-    });
+	await fs.promises.mkdir(outputFolder, { recursive: true })
+	await fs.promises.mkdir(DOCS_DIR, { recursive: true })
 
-    if (extractorResult.succeeded) {
-        console.log(`API Extractor completed successfully`);
-        process.exitCode = 0;
-    } else {
-        console.error(`API Extractor completed with ${extractorResult.errorCount} errors`
-            + ` and ${extractorResult.warningCount} warnings`);
-        process.exitCode = 1;
-    }
-    const outputFolder = './temp';
+	await new Promise((resolve, reject) =>
+		exec(`api-documenter markdown -i ./temp -o ${DOCS_DIR}`, (err, stdout, stderr) => {
+			console.log(stdout)
+			console.error(stderr)
+			if (err) {
+				reject(err)
+			} else {
+				resolve('')
+			}
+		}),
+	)
 
-    await fs.promises.mkdir(outputFolder, {recursive: true})
-    await fs.promises.mkdir(DOCS_DIR, {recursive: true})
+	const docFiles = await readdir(DOCS_DIR)
+	for (const docFile of docFiles) {
+		try {
+			const { name: id, ext } = parse(docFile)
+			if (ext !== '.md') {
+				continue
+			}
 
-    await new Promise((resolve, reject) =>
-        exec(`api-documenter markdown -i ./temp -o ${DOCS_DIR}`, (err, stdout, stderr) => {
-            console.log(stdout)
-            console.error(stderr)
-            if (err) {
-                reject(err)
-            } else {
-                resolve('')
-            }
-        }),
-    )
+			const docPath = join(DOCS_DIR, docFile)
+			const input = createReadStream(docPath)
+			const output: string[] = []
+			const lines = createInterface({
+				input,
+				crlfDelay: Infinity,
+			})
 
-    const docFiles = await readdir(DOCS_DIR)
-    for (const docFile of docFiles) {
-        try {
-            const {name: id, ext} = parse(docFile)
-            if (ext !== '.md') {
-                continue
-            }
+			let title = ''
+			lines.on('line', (line) => {
+				let skip = false
+				if (!title) {
+					const titleLine = line.match(/## (.*)/)
+					if (titleLine) {
+						title = titleLine[1]
+					}
+				}
+				const indexHomeLink = line.match(/\[Home]\(.\/index\.md\)/)
+				const homeLink = line.match(/\[Home]\(.\/index\.md\) &gt; (.*)/)
+				if (homeLink) {
+					line = line.replace('Home', 'Packages')
+				}
 
-            const docPath = join(DOCS_DIR, docFile)
-            const input = createReadStream(docPath)
-            const output: string[] = []
-            const lines = createInterface({
-                input,
-                crlfDelay: Infinity,
-            })
+				if (indexHomeLink) {
+					// Skip the breadcrumb for the toplevel index file.
+					if (id === 'index') {
+						skip = true
+					}
 
-            let title = ''
-            lines.on('line', (line) => {
-                let skip = false
-                if (!title) {
-                    const titleLine = line.match(/## (.*)/)
-                    if (titleLine) {
-                        title = titleLine[1]
-                    }
-                }
-                const indexHomeLink = line.match(/\[Home]\(.\/index\.md\)/)
-                const homeLink = line.match(/\[Home]\(.\/index\.md\) &gt; (.*)/)
-                if (homeLink) {
-                    line = line.replace('Home', 'Packages')
-                }
+					skip = true
+				}
+				if (line.startsWith('|')) {
+					line = line.replace(/\\\|/g, '&#124;')
+				}
 
-                if (indexHomeLink) {
-                    // Skip the breadcrumb for the toplevel index file.
-                    if (id === 'index') {
-                        skip = true
-                    }
+				line = replaceAll(line, '<!-- -->', '')
+				if (!skip) {
+					output.push(line)
+				}
+			})
 
-                    skip = true
-                }
-                if (line.startsWith('|')) {
-                    line = line.replace(/\\\|/g, '&#124;')
-                }
+			await new Promise((resolve) => lines.once('close', resolve))
+			input.close()
 
-                line = replaceAll(line, '<!-- -->', '')
-                if (!skip) {
-                    output.push(line)
-                }
-            })
+			const header = ['---', `id: ${id}`, `title: ${title}`, `hide_title: true`, '---']
+			let outputString = header.concat(output).join('\n')
 
-            await new Promise((resolve) => lines.once('close', resolve))
-            input.close()
+			outputString = outputString.replace(/<a\nhref=/g, '<a href=')
 
-            const header = ['---', `id: ${id}`, `title: ${title}`, `hide_title: true`, '---']
-            let outputString = header.concat(output).join('\n')
-
-            outputString = outputString.replace(/<a\nhref=/g, '<a href=')
-
-            await writeFile(docPath, outputString)
-        } catch (err) {
-            console.error(`Could not process ${docFile}: ${err}`)
-        }
-    }
+			await writeFile(docPath, outputString)
+		} catch (err) {
+			console.error(`Could not process ${docFile}: ${err}`)
+		}
+	}
 }
 
 function escapeRegExp(string: string) {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // $& means the whole matched string
+	return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // $& means the whole matched string
 }
 
 function replaceAll(str: string, find: string, replace: string) {
-    return str.replace(new RegExp(escapeRegExp(find), 'g'), replace)
+	return str.replace(new RegExp(escapeRegExp(find), 'g'), replace)
 }
 
 chokidar.watch(path.join(__dirname, '../src/'), {
-    ignoreInitial: true,
-    usePolling: true,
-    persistent: true,
-    interval: 1000,
+	ignoreInitial: true,
+	usePolling:true,
+	persistent:true,
+	interval:1000,
 }).on('change', async (event, path) => {
-    console.log(`${event} - ${path} - present changes, building...`);
-    await main();
-    console.log('finished building...');
-}).on('ready', async (event: unknown, path: unknown) => {
-    console.log('ready building...');
+	console.log(`${event} - ${path} - present changes, building...`);
+	await main();
+	console.log('finished building...');
+}).on('ready', async (event:unknown, path:unknown) => {
+	console.log('ready building...');
 });
-main();
+ main();
 
 
 
