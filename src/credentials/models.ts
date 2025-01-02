@@ -1,5 +1,7 @@
+import { JsonDocumentObject } from '../iden3comm';
 import {
   CredentialStatusType,
+  DisplayMethod,
   MerklizedRootPosition,
   RefreshService,
   SubjectPosition
@@ -22,6 +24,10 @@ export type PublishMode = 'sync' | 'async' | 'callback';
  */
 export interface CredentialRequest {
   /**
+   * Credential ID
+   */
+  id?: string;
+  /**
    * JSON credential schema
    */
   credentialSchema: string;
@@ -32,7 +38,7 @@ export interface CredentialRequest {
   /**
    * Credential subject, usually contains claims and identifier
    */
-  credentialSubject: { [key: string]: string | object | number | boolean };
+  credentialSubject: JsonDocumentObject;
   /**
    * expiration time
    */
@@ -41,6 +47,14 @@ export interface CredentialRequest {
    * refreshService
    */
   refreshService?: RefreshService;
+  /**
+   * displayMethod
+   */
+  displayMethod?: DisplayMethod;
+  /**
+   * optional custom context
+   */
+  context?: string[];
   /**
    * claim version
    */
@@ -54,6 +68,10 @@ export interface CredentialRequest {
    * merklizedRootPosition (index / value / none)
    */
   merklizedRootPosition?: MerklizedRootPosition;
+  /**
+   * issuance Date
+   */
+  issuanceDate?: number;
 
   /**
    * Revocation options

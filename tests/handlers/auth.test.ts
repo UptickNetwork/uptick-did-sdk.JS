@@ -41,7 +41,10 @@ import {
   StateInfo,
   hexToBytes,
   NativeProver,
-  VerifiableConstants
+  VerifiableConstants,
+  buildAccept,
+  AcceptProfile,
+  createAuthorizationRequest
 } from '../../src';
 import { ProvingMethodAlg, Token } from '@iden3/js-jwz';
 import { Blockchain, DID, DidMethod, NetworkId } from '@iden3/js-iden3-core';
@@ -64,6 +67,12 @@ import {
   MOCK_STATE_STORAGE
 } from '../helpers';
 import { getRandomBytes } from '@iden3/js-crypto';
+import {
+  AcceptAuthCircuits,
+  defaultAcceptProfile,
+  MediaType,
+  ProtocolVersion
+} from '../../src/iden3comm/constants';
 
 describe('auth', () => {
   let idWallet: IdentityWallet;
@@ -118,13 +127,17 @@ describe('auth', () => {
 
   it('request-response flow identity (not profile)', async () => {
     const claimReq: CredentialRequest = {
-      credentialSchema:
-        'https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json/kyc-nonmerklized.json',
-      type: 'KYCAgeCredential',
+      credentialSchema: 'ipfs://QmWDmZQrtvidcNK7d6rJwq7ZSi8SUygJaKepN7NhKtGryc',
+      type: 'operators',
       credentialSubject: {
         id: userDID.string(),
-        birthday: 19960424,
-        documentType: 99
+        boolean1: true,
+        'date-time1': '2024-11-04T12:39:00Z',
+        integer1: 4321,
+        'non-negative-integer1': '654321',
+        number1: 1234,
+        'positive-integer1': '123456789',
+        string1: 'abcd'
       },
       expiration: 2793526400,
       revocationOpts: {
@@ -132,44 +145,43 @@ describe('auth', () => {
         id: RHS_URL
       }
     };
-    const issuerCred = await idWallet.issueCredential(issuerDID, claimReq);
+    const issuerCred = await idWallet.issueCredential(issuerDID, claimReq, {
+      ipfsNodeURL: IPFS_URL
+    });
 
     await credWallet.save(issuerCred);
 
     const proofReq: ZeroKnowledgeProofRequest = {
-      id: 1,
-      circuitId: CircuitId.AtomicQuerySigV2,
+      id: 1730736196,
+      circuitId: CircuitId.AtomicQueryV3,
       optional: false,
       query: {
         allowedIssuers: ['*'],
-        type: claimReq.type,
-        context:
-          'https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json-ld/kyc-nonmerklized.jsonld',
+        context: 'ipfs://Qmb48rJ5SiQMLXjVkaLQB6fWbT7C8LK75MHsCoHv8GAc15',
         credentialSubject: {
-          documentType: {
-            $eq: 99
+          'positive-integer1': {
+            $between: ['123456789', '1123456789']
           }
-        }
+        },
+        type: 'operators'
       }
     };
 
-    const authReqBody: AuthorizationRequestMessageBody = {
-      callbackUrl: 'http://localhost:8080/callback?id=1234442-123123-123123',
-      reason: 'reason',
-      message: 'mesage',
-      did_doc: {},
-      scope: [proofReq as ZeroKnowledgeProofRequest]
+    const profile: AcceptProfile = {
+      protocolVersion: ProtocolVersion.V1,
+      env: MediaType.ZKPMessage,
+      circuits: [AcceptAuthCircuits.AuthV2]
     };
 
-    const id = uuid.v4();
-    const authReq: AuthorizationRequestMessage = {
-      id,
-      typ: PROTOCOL_CONSTANTS.MediaType.PlainMessage,
-      type: PROTOCOL_CONSTANTS.PROTOCOL_MESSAGE_TYPE.AUTHORIZATION_REQUEST_MESSAGE_TYPE,
-      thid: id,
-      body: authReqBody,
-      from: issuerDID.string()
-    };
+    const authReq = createAuthorizationRequest(
+      'reason',
+      issuerDID.string(),
+      'http://localhost:8080/callback?id=1234442-123123-123123',
+      {
+        scope: [proofReq],
+        accept: buildAccept([profile])
+      }
+    );
 
     const msgBytes = byteEncoder.encode(JSON.stringify(authReq));
     const authRes = await authHandler.handleAuthorizationRequest(userDID, msgBytes);
@@ -226,8 +238,8 @@ describe('auth', () => {
     const authReqBody: AuthorizationRequestMessageBody = {
       callbackUrl: 'http://localhost:8080/callback?id=1234442-123123-123123',
       reason: 'reason',
-      message: 'mesage',
-      did_doc: {},
+      message: 'message',
+      accept: buildAccept([defaultAcceptProfile]),
       scope: [proofReq as ZeroKnowledgeProofRequest]
     };
 
@@ -385,8 +397,7 @@ describe('auth', () => {
     const authReqBody: AuthorizationRequestMessageBody = {
       callbackUrl: 'http://localhost:8080/callback?id=1234442-123123-123123',
       reason: 'reason',
-      message: 'mesage',
-      did_doc: {},
+      message: 'message',
       scope: proofReqs
     };
 
@@ -549,8 +560,7 @@ describe('auth', () => {
     const authReqBody: AuthorizationRequestMessageBody = {
       callbackUrl: 'http://localhost:8080/callback?id=1234442-123123-123123',
       reason: 'reason',
-      message: 'mesage',
-      did_doc: {},
+      message: 'message',
       scope: proofReqs
     };
 
@@ -791,8 +801,7 @@ describe('auth', () => {
     const authReqBody: AuthorizationRequestMessageBody = {
       callbackUrl: 'http://localhost:8080/callback?id=1234442-123123-123123',
       reason: 'reason',
-      message: 'mesage',
-      did_doc: {},
+      message: 'message',
       scope: proofReqs
     };
 
@@ -820,22 +829,9 @@ describe('auth', () => {
     const userId = 'did:polygonid:polygon:mumbai:2qPDLXDaU1xa1ERTb1XKBfPCB3o2wA46q49neiXWwY';
     const reason = 'test';
     const message = 'message to sign';
-    const request: AuthorizationRequestMessage = createAuthorizationRequestWithMessage(
-      reason,
-      message,
-      sender,
-      callback
-    );
-    expect(request.body.scope.length).to.be.eq(0);
-    expect(request.body.callbackUrl).to.be.eq(callback);
-    expect(request.body.reason).to.be.eq(reason);
-    expect(request.from).to.be.eq(sender);
-
-    request.thid = '7f38a193-0918-4a48-9fac-36adfdb8b542';
-
     const proofRequest: ZeroKnowledgeProofRequest = {
       id: 23,
-      circuitId: 'credentialAtomicQueryMTPV2',
+      circuitId: CircuitId.AtomicQueryMTPV2,
       query: {
         allowedIssuers: ['*'],
         context:
@@ -848,10 +844,20 @@ describe('auth', () => {
         }
       }
     };
-    request.body.scope.push(proofRequest);
-
+    const request: AuthorizationRequestMessage = createAuthorizationRequestWithMessage(
+      reason,
+      message,
+      sender,
+      callback,
+      {
+        scope: [proofRequest]
+      }
+    );
     expect(request.body.scope.length).to.be.eq(1);
-
+    expect(request.body.callbackUrl).to.be.eq(callback);
+    expect(request.body.reason).to.be.eq(reason);
+    expect(request.from).to.be.eq(sender);
+    request.thid = '7f38a193-0918-4a48-9fac-36adfdb8b542';
     const mtpProof: ZeroKnowledgeProofResponse = {
       id: proofRequest.id,
       circuitId: 'credentialAtomicQueryMTPV2',
@@ -997,7 +1003,7 @@ describe('auth', () => {
 
     const proofRequest: ZeroKnowledgeProofRequest = {
       id: 84239,
-      circuitId: 'credentialAtomicQuerySigV2',
+      circuitId: CircuitId.AtomicQuerySigV2,
       query: {
         allowedIssuers: ['*'],
         context:
@@ -1299,7 +1305,7 @@ describe('auth', () => {
   });
 
   it('auth response: TestVerifyV3MessageWithMtpProof_Merklized', async () => {
-    const request = {
+    const request: AuthorizationRequestMessage = {
       id: '7e5b5847-b479-4499-90ee-5fe4826a5bdd',
       typ: PROTOCOL_CONSTANTS.MediaType.PlainMessage,
       type: 'https://iden3-communication.io/authorization/1.0/request',
@@ -1318,7 +1324,7 @@ describe('auth', () => {
               context:
                 'https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json-ld/kyc-v3.json-ld',
               credentialSubject: { documentType: { $eq: 99 } },
-              proofType: 'Iden3SparseMerkleTreeProof',
+              proofType: ProofType.Iden3SparseMerkleTreeProof,
               type: 'KYCAgeCredential'
             }
           }
@@ -1466,8 +1472,7 @@ describe('auth', () => {
       body: {
         callbackUrl: 'http://localhost:8080/callback?id=1234442-123123-123123',
         reason: 'reason',
-        message: 'mesage',
-        did_doc: {},
+        message: 'message',
         scope: [
           {
             id: 1,
@@ -1535,12 +1540,12 @@ describe('auth', () => {
     };
 
     const response = JSON.parse(
-      `{"id":"9f8c5eaf-761b-45a3-9291-e716809ace80","typ":"application/iden3-zkp-json","type":"https://iden3-communication.io/authorization/1.0/response","thid":"f1db2356-9f44-48ad-9b76-f89d47f21f6a","body":{"message":"mesage","scope":[{"id":1,"circuitId":"credentialAtomicQueryV3-beta.1","proof":{"pi_a":["1957042983521939777779358613512940538748371001503599796504079991585151845626","5980467088491530700980741867186770936154186459285094575907693303048036963689","1"],"pi_b":[["5742671146783049896789457637506168650313117608892287762091826086179746860469","7867980002214299883401553001814837114723536790472835510365975534274190677490"],["6409919485783982335585179727042442194321707383499872699189740318445051390961","1369980068779537226244190127504408237299520988801560937733214682094782613117"],["1","0"]],"pi_c":["5711121494820066463200893985386651555980045684596061159643138162113786427802","4095818364808367579242275974249584152089253995861921406668522195898158853090","1"],"protocol":"groth16","curve":"bn128"},"pub_signals":["0","21568225469889458305914841490175280093555015071329787375641431262509208065","4487386332479489158003597844990487984925471813907462483907054425759564175341","0","0","0","1","1","25191641634853875207018381290409317860151551336133597267061715643603096065","1","4487386332479489158003597844990487984925471813907462483907054425759564175341","1709225461","198285726510688200335207273836123338699","0","3","1","99","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","1","25191641634853875207018381290409317860151551336133597267061715643603096065","0"]},{"id":2,"circuitId":"linkedMultiQuery10-beta.1","proof":{"pi_a":["10008762987135252748343336852440821999292200194586609431123158877924829442619","643120883606370243165315267728925724383441131555632496875810966571180142836","1"],"pi_b":[["20325202427888218305042001051611691791013545949589864140437875458628437599770","8717600144533993361171658192288756446811108221293161636717237909993926710318"],["14981619958191157581227114000872054457371373393565997302166302876147503284338","16553636587728487263592580154123194292472350845107268041191122057483030032517"],["1","0"]],"pi_c":["16072126589976107857236142821613193518209749401521398065019425748092192614959","303906682296869502342276988123716958990500798695456357531107835924939259150","1"],"protocol":"groth16","curve":"bn128"},"pub_signals":["14840595334989550616466083197180000787621620083536890923904228235213356726165","1","0","0","0","0","0","0","0","0","0","0","15577114799056939633552845531011024672939493492769628285661359711655214561162","16998762965396944782667557741185828136467747762830028217027973617373862301958","9302526208507753799501130128908494673412443631541424409551205277529949662394","14612518006493998037149299647974237771551070312096882407440651052752259038403","14612518006493998037149299647974237771551070312096882407440651052752259038403","14612518006493998037149299647974237771551070312096882407440651052752259038403","14612518006493998037149299647974237771551070312096882407440651052752259038403","14612518006493998037149299647974237771551070312096882407440651052752259038403","14612518006493998037149299647974237771551070312096882407440651052752259038403","14612518006493998037149299647974237771551070312096882407440651052752259038403"]},{"id":3,"circuitId":"credentialAtomicQueryV3-beta.1","proof":{"pi_a":["4918421968222994875065132919357788716527410020013314076838075601739876838116","10576714801149162526665883185954136825228282980216373802495776414648547250389","1"],"pi_b":[["11108578138197665525735155920251801717888098160693764639454679880928722733880","3997721247159844618817277585055198811110117246676622629879543401795646667027"],["20635473172141447711225783196574171578493742575849493414547293568487122129963","6948443179619059689387710642006412901626278322232965354300544053846217743110"],["1","0"]],"pi_c":["469119326794229447935775203453233806548971393125675053242929084072054328769","178813906627150338283979844326455982590598033322249897359697376726879654625","1"],"protocol":"groth16","curve":"bn128"},"pub_signals":["1","21568225469889458305914841490175280093555015071329787375641431262509208065","4487386332479489158003597844990487984925471813907462483907054425759564175341","14840595334989550616466083197180000787621620083536890923904228235213356726165","21051816437711998017249050444244727806861025707804897813951842286690382472927","0","1","3","25191641634853875207018381290409317860151551336133597267061715643603096065","1","4487386332479489158003597844990487984925471813907462483907054425759564175341","1709225477","219578617064540016234161640375755865412","1296351758269061173317105041968067077451914386086222931516199194959869463882","0","1","1702252800000000000","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","1","25191641634853875207018381290409317860151551336133597267061715643603096065","12345"]}]},"from":"did:iden3:polygon:mumbai:wuw5tydZ7AAd3efwEqPprnqjiNHR24jqruSPKmV1V","to":"did:iden3:polygon:mumbai:wzokvZ6kMoocKJuSbftdZxTD6qvayGpJb3m4FVXth"}`
+      `{"id":"9f8c5eaf-761b-45a3-9291-e716809ace80","typ":"application/iden3-zkp-json","type":"https://iden3-communication.io/authorization/1.0/response","thid":"f1db2356-9f44-48ad-9b76-f89d47f21f6a","body":{"message":"message","scope":[{"id":1,"circuitId":"credentialAtomicQueryV3-beta.1","proof":{"pi_a":["1957042983521939777779358613512940538748371001503599796504079991585151845626","5980467088491530700980741867186770936154186459285094575907693303048036963689","1"],"pi_b":[["5742671146783049896789457637506168650313117608892287762091826086179746860469","7867980002214299883401553001814837114723536790472835510365975534274190677490"],["6409919485783982335585179727042442194321707383499872699189740318445051390961","1369980068779537226244190127504408237299520988801560937733214682094782613117"],["1","0"]],"pi_c":["5711121494820066463200893985386651555980045684596061159643138162113786427802","4095818364808367579242275974249584152089253995861921406668522195898158853090","1"],"protocol":"groth16","curve":"bn128"},"pub_signals":["0","21568225469889458305914841490175280093555015071329787375641431262509208065","4487386332479489158003597844990487984925471813907462483907054425759564175341","0","0","0","1","1","25191641634853875207018381290409317860151551336133597267061715643603096065","1","4487386332479489158003597844990487984925471813907462483907054425759564175341","1709225461","198285726510688200335207273836123338699","0","3","1","99","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","1","25191641634853875207018381290409317860151551336133597267061715643603096065","0"]},{"id":2,"circuitId":"linkedMultiQuery10-beta.1","proof":{"pi_a":["10008762987135252748343336852440821999292200194586609431123158877924829442619","643120883606370243165315267728925724383441131555632496875810966571180142836","1"],"pi_b":[["20325202427888218305042001051611691791013545949589864140437875458628437599770","8717600144533993361171658192288756446811108221293161636717237909993926710318"],["14981619958191157581227114000872054457371373393565997302166302876147503284338","16553636587728487263592580154123194292472350845107268041191122057483030032517"],["1","0"]],"pi_c":["16072126589976107857236142821613193518209749401521398065019425748092192614959","303906682296869502342276988123716958990500798695456357531107835924939259150","1"],"protocol":"groth16","curve":"bn128"},"pub_signals":["14840595334989550616466083197180000787621620083536890923904228235213356726165","1","0","0","0","0","0","0","0","0","0","0","15577114799056939633552845531011024672939493492769628285661359711655214561162","16998762965396944782667557741185828136467747762830028217027973617373862301958","9302526208507753799501130128908494673412443631541424409551205277529949662394","14612518006493998037149299647974237771551070312096882407440651052752259038403","14612518006493998037149299647974237771551070312096882407440651052752259038403","14612518006493998037149299647974237771551070312096882407440651052752259038403","14612518006493998037149299647974237771551070312096882407440651052752259038403","14612518006493998037149299647974237771551070312096882407440651052752259038403","14612518006493998037149299647974237771551070312096882407440651052752259038403","14612518006493998037149299647974237771551070312096882407440651052752259038403"]},{"id":3,"circuitId":"credentialAtomicQueryV3-beta.1","proof":{"pi_a":["4918421968222994875065132919357788716527410020013314076838075601739876838116","10576714801149162526665883185954136825228282980216373802495776414648547250389","1"],"pi_b":[["11108578138197665525735155920251801717888098160693764639454679880928722733880","3997721247159844618817277585055198811110117246676622629879543401795646667027"],["20635473172141447711225783196574171578493742575849493414547293568487122129963","6948443179619059689387710642006412901626278322232965354300544053846217743110"],["1","0"]],"pi_c":["469119326794229447935775203453233806548971393125675053242929084072054328769","178813906627150338283979844326455982590598033322249897359697376726879654625","1"],"protocol":"groth16","curve":"bn128"},"pub_signals":["1","21568225469889458305914841490175280093555015071329787375641431262509208065","4487386332479489158003597844990487984925471813907462483907054425759564175341","14840595334989550616466083197180000787621620083536890923904228235213356726165","21051816437711998017249050444244727806861025707804897813951842286690382472927","0","1","3","25191641634853875207018381290409317860151551336133597267061715643603096065","1","4487386332479489158003597844990487984925471813907462483907054425759564175341","1709225477","219578617064540016234161640375755865412","1296351758269061173317105041968067077451914386086222931516199194959869463882","0","1","1702252800000000000","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","1","25191641634853875207018381290409317860151551336133597267061715643603096065","12345"]}]},"from":"did:iden3:polygon:mumbai:wuw5tydZ7AAd3efwEqPprnqjiNHR24jqruSPKmV1V","to":"did:iden3:polygon:mumbai:wzokvZ6kMoocKJuSbftdZxTD6qvayGpJb3m4FVXth"}`
     ) as AuthorizationResponseMessage;
     await authHandler.handleAuthorizationResponse(response, authRequest, TEST_VERIFICATION_OPTS);
   });
 
-  it('null scope auth requst', async () => {
+  it('null scope auth request', async () => {
     const msgBytes = byteEncoder.encode(
       '{"id":"f3688b54-248d-4a75-b743-39f99a49adb8","typ":"application/iden3comm-plain-json","type":"https://iden3-communication.io/authorization/1.0/request","thid":"f3688b54-248d-4a75-b743-39f99a49adb8","body":{"callbackUrl":"https://issuer-admin.polygonid.me/v1/credentials/links/callback?sessionID=1bd6b1cb-cfc1-4817-8b77-3bc150435e29\u0026linkID=880face8-43b7-428b-80b1-adb6da0632ac","reason":"authentication","scope":null},"from":"did:polygonid:polygon:mumbai:2qMLpQ5py1YzBTTuLEeX2yr6pDGQ7gyXAfygaPakzq"}'
     );
@@ -1556,6 +1561,7 @@ describe('auth', () => {
     const stateEthConfig = defaultEthConnectionConfig;
     stateEthConfig.url = RPC_URL;
     stateEthConfig.contractAddress = STATE_CONTRACT;
+    stateEthConfig.chainId = 80002;
     const eth = new EthStateStorage(stateEthConfig);
 
     const kms = registerKeyProvidersInMemoryKMS();
@@ -1765,6 +1771,59 @@ describe('auth', () => {
     expect(tokenStr).to.be.a('string');
   });
 
+  it('auth request: v2 sig sd', async () => {
+    const sender = 'did:polygonid:polygon:mumbai:2qJ689kpoJxcSzB5sAFJtPsSBSrHF5dq722BHMqURL';
+    const callback = 'https://test.com/callback';
+    const reason = 'age verification';
+    const request: AuthorizationRequestMessage = createAuthorizationRequestWithMessage(
+      reason,
+      '',
+      sender,
+      callback
+    );
+
+    const claimReq: CredentialRequest = {
+      credentialSchema:
+        'https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json/KYCAgeCredential-v4.json',
+      type: 'KYCAgeCredential',
+      credentialSubject: {
+        id: userDID.string(),
+        birthday: 19960424,
+        documentType: 99
+      },
+      expiration: 2793526400,
+      revocationOpts: {
+        type: CredentialStatusType.Iden3ReverseSparseMerkleTreeProof,
+        id: RHS_URL
+      }
+    };
+
+    const issuerCred = await idWallet.issueCredential(issuerDID, claimReq);
+    await credWallet.save(issuerCred);
+
+    const proofRequest: ZeroKnowledgeProofRequest = {
+      id: 1,
+      circuitId: CircuitId.AtomicQuerySigV2,
+      query: {
+        allowedIssuers: ['*'],
+        context:
+          'https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json-ld/kyc-v4.jsonld',
+        type: 'KYCAgeCredential',
+        credentialSubject: {
+          birthday: {}
+        }
+      }
+    };
+    request.body.scope.push(proofRequest);
+    request.id = '28494007-9c49-4f1a-9694-7700c08865bf';
+    request.thid = '7f38a193-0918-4a48-9fac-36adfdb8b542';
+
+    const msgBytes = byteEncoder.encode(JSON.stringify(request));
+    const authRes = await authHandler.handleAuthorizationRequest(userDID, msgBytes);
+    const tokenStr = authRes.token;
+    expect(tokenStr).to.be.a('string');
+  });
+
   it('auth response: TestVerify v2 sig sd', async () => {
     const sender = 'did:polygonid:polygon:mumbai:2qJ689kpoJxcSzB5sAFJtPsSBSrHF5dq722BHMqURL';
     const callback = 'https://test.com/callback';
@@ -1778,7 +1837,7 @@ describe('auth', () => {
 
     const proofRequest: ZeroKnowledgeProofRequest = {
       id: 1,
-      circuitId: 'credentialAtomicQuerySigV2',
+      circuitId: CircuitId.AtomicQuerySigV2,
       query: {
         allowedIssuers: ['*'],
         context:
@@ -2090,8 +2149,7 @@ describe('auth', () => {
     const authReqBody: AuthorizationRequestMessageBody = {
       callbackUrl: 'http://localhost:8080/callback?id=1234442-123123-123123',
       reason: 'reason',
-      message: 'mesage',
-      did_doc: {},
+      message: 'message',
       scope: proofReqs
     };
 
@@ -2155,8 +2213,7 @@ describe('auth', () => {
     const authReqBody: AuthorizationRequestMessageBody = {
       callbackUrl: 'http://localhost:8080/callback?id=1234442-123123-123123',
       reason: 'reason',
-      message: 'mesage',
-      did_doc: {},
+      message: 'message',
       scope: [proofReq as ZeroKnowledgeProofRequest]
     };
 
@@ -2309,6 +2366,72 @@ describe('auth', () => {
     // this should not work because we revoked user keys
     await expect(handleAuthorizationRequest(userDID, authReqBody)).to.rejectedWith(
       VerifiableConstants.ERRORS.NO_AUTH_CRED_FOUND
+    );
+  });
+
+  it('request-response flow identity - accept header not supported', async () => {
+    const claimReq: CredentialRequest = {
+      credentialSchema:
+        'https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json/kyc-nonmerklized.json',
+      type: 'KYCAgeCredential',
+      credentialSubject: {
+        id: userDID.string(),
+        birthday: 19960424,
+        documentType: 99
+      },
+      expiration: 2793526400,
+      revocationOpts: {
+        type: CredentialStatusType.Iden3ReverseSparseMerkleTreeProof,
+        id: RHS_URL
+      }
+    };
+    const issuerCred = await idWallet.issueCredential(issuerDID, claimReq);
+
+    await credWallet.save(issuerCred);
+
+    const proofReq: ZeroKnowledgeProofRequest = {
+      id: 1,
+      circuitId: CircuitId.AtomicQuerySigV2,
+      optional: false,
+      query: {
+        allowedIssuers: ['*'],
+        type: claimReq.type,
+        context:
+          'https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json-ld/kyc-nonmerklized.jsonld',
+        credentialSubject: {
+          documentType: {
+            $eq: 99
+          }
+        }
+      }
+    };
+
+    const authV3NotSupportedProfile: AcceptProfile = {
+      protocolVersion: ProtocolVersion.V1,
+      env: MediaType.ZKPMessage,
+      circuits: [AcceptAuthCircuits.AuthV3]
+    };
+    const authReqBody: AuthorizationRequestMessageBody = {
+      callbackUrl: 'http://localhost:8080/callback?id=1234442-123123-123123',
+      reason: 'reason',
+      message: 'message',
+      accept: buildAccept([authV3NotSupportedProfile]),
+      scope: [proofReq as ZeroKnowledgeProofRequest]
+    };
+
+    const id = uuid.v4();
+    const authReq: AuthorizationRequestMessage = {
+      id,
+      typ: PROTOCOL_CONSTANTS.MediaType.PlainMessage,
+      type: PROTOCOL_CONSTANTS.PROTOCOL_MESSAGE_TYPE.AUTHORIZATION_REQUEST_MESSAGE_TYPE,
+      thid: id,
+      body: authReqBody,
+      from: issuerDID.string()
+    };
+
+    const msgBytes = byteEncoder.encode(JSON.stringify(authReq));
+    await expect(authHandler.handleAuthorizationRequest(userDID, msgBytes)).to.be.rejectedWith(
+      'no packer with profile which meets `accept` header requirements'
     );
   });
 });

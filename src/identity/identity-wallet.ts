@@ -76,13 +76,19 @@ export type IdentityCreationOptions = {
 /**
  * Options for creating Auth BJJ credential
  * seed - seed to generate BJJ key pair
- * revocationOpts -
+ * revocationOpts
+ *  nonce - explicit revocation nonce to use
+ *  onChain - onchain status related option
+ *      txCallback - defines how the TransactionReceipt is handled
+ *      publishMode  - specifies the work of transaction polling type: sync / async / callback
+ *  genesisPublishingDisabled - genesis is publishing by default. Set `true` to prevent genesis publishing
  */
 export type AuthBJJCredentialCreationOptions = {
   revocationOpts: {
     id: string;
     type: CredentialStatusType;
     nonce?: number;
+    genesisPublishingDisabled?: boolean;
     onChain?: {
       txCallback?: (tx: TransactionReceipt) => Promise<void>;
       publishMode?: PublishMode;
@@ -163,11 +169,11 @@ export interface IIdentityWallet {
    * Creates profile based on genesis identifier
    *
    * @param {DID} did - identity to derive profile from
-   * @param {number} nonce - unique integer number to generate a profile
+   * @param {number |string} nonce - unique integer number to generate a profile
    * @param {string} verifier - verifier identity/alias in a string from
    * @returns `Promise<DID>` - profile did
    */
-  createProfile(did: DID, nonce: number, verifier: string): Promise<DID>;
+  createProfile(did: DID, nonce: number | string, verifier: string): Promise<DID>;
 
   /**
    * Generates a new key
@@ -381,7 +387,7 @@ export interface IIdentityWallet {
    * @param {DID} did -  profile that has been derived or genesis identity
    * @returns `{Promise<{nonce:number, genesisIdentifier: DID}>}`
    */
-  getGenesisDIDMetadata(did: DID): Promise<{ nonce: number; genesisDID: DID }>;
+  getGenesisDIDMetadata(did: DID): Promise<{ nonce: number | string; genesisDID: DID }>;
 
   /**
    *
@@ -661,13 +667,24 @@ export class IdentityWallet implements IIdentityWallet {
       allowedIssuers: [did.string()]
     });
 
-    if (credentials.length) {
+    // if credential exists with the same credential status type we return this credential
+    if (
+      credentials.length === 1 &&
+      credentials[0].credentialStatus.type === opts.revocationOpts.type
+    ) {
       return {
         did,
         credential: credentials[0]
       };
     }
 
+    // otherwise something is already wrong with storage as it has more than 1 credential in it or credential status type of existing credential is different from what user provides - We should remove everything and create new credential.
+    // in this way credential status of auth credential can be upgraded
+    for (let i = 0; i < credentials.length; i++) {
+      await this._credentialWallet.remove(credentials[i].id);
+    }
+
+    // otherwise  we create a new credential
     const credential = await this.createAuthBJJCredential(
       did,
       pubKey,
@@ -695,10 +712,13 @@ export class IdentityWallet implements IIdentityWallet {
 
     credential.proof = [mtpProof];
 
-    await this.publishRevocationInfoByCredentialStatusType(did, opts.revocationOpts.type, {
-      rhsUrl: opts.revocationOpts.id,
-      onChain: opts.revocationOpts.onChain
-    });
+    // only if user specified that genesis state publishing is not needed we won't do this.
+    if (!opts.revocationOpts.genesisPublishingDisabled) {
+      await this.publishRevocationInfoByCredentialStatusType(did, opts.revocationOpts.type, {
+        rhsUrl: opts.revocationOpts.id,
+        onChain: opts.revocationOpts.onChain
+      });
+    }
 
     await this._credentialWallet.save(credential);
 
@@ -766,7 +786,7 @@ export class IdentityWallet implements IIdentityWallet {
   }
 
   /** {@inheritDoc IIdentityWallet.getGenesisDIDMetadata} */
-  async getGenesisDIDMetadata(did: DID): Promise<{ nonce: number; genesisDID: DID }> {
+  async getGenesisDIDMetadata(did: DID): Promise<{ nonce: number | string; genesisDID: DID }> {
     // check if it is a genesis identity
     const identity = await this._storage.identity.getIdentity(did.string());
 
@@ -782,7 +802,7 @@ export class IdentityWallet implements IIdentityWallet {
   }
 
   /** {@inheritDoc IIdentityWallet.createProfile} */
-  async createProfile(did: DID, nonce: number, verifier: string): Promise<DID> {
+  async createProfile(did: DID, nonce: number | string, verifier: string): Promise<DID> {
     const profileDID = generateProfileDID(did, nonce);
 
     const identityProfiles = await this._storage.identity.getProfilesByGenesisIdentifier(
@@ -1248,30 +1268,18 @@ export class IdentityWallet implements IIdentityWallet {
     }
 
     let nodes: ProofNode[] = [];
-    if (opts?.treeModel) {
-      nodes = await getNodesRepresentation(
-        opts.revokedNonces,
-        {
-          revocationTree: opts.treeModel.revocationTree,
-          claimsTree: opts.treeModel.claimsTree,
-          state: opts.treeModel.state,
-          rootsTree: opts.treeModel.rootsTree
-        },
-        opts.treeModel.state
-      );
-    } else {
-      const treeState = await this.getDIDTreeModel(issuerDID);
-      nodes = await getNodesRepresentation(
-        opts?.revokedNonces,
-        {
-          revocationTree: treeState.revocationTree,
-          claimsTree: treeState.claimsTree,
-          state: treeState.state,
-          rootsTree: treeState.rootsTree
-        },
-        treeState.state
-      );
-    }
+
+    const tree = opts?.treeModel ?? (await this.getDIDTreeModel(issuerDID));
+    nodes = await getNodesRepresentation(
+      opts?.revokedNonces ?? [],
+      {
+        revocationTree: tree.revocationTree,
+        claimsTree: tree.claimsTree,
+        state: tree.state,
+        rootsTree: tree.rootsTree
+      },
+      tree.state
+    );
 
     if (!nodes.length) {
       return;
@@ -1518,6 +1526,7 @@ export class IdentityWallet implements IIdentityWallet {
         txId = await this.transitState(did, oldTreeState, isOldStateGenesis, ethSigner, prover);
         break;
       } catch (err) {
+        // eslint-disable-next-line no-console
         console.warn(
           `Error while transiting state, retrying state transition, attempt: ${attempt}`,
           err

@@ -11,15 +11,22 @@ import {
   DID,
   MerklizedRootPosition as MerklizedRootPositionCore,
   IdPosition,
-  ClaimOptions
+  ClaimOptions,
+  getChainId
 } from '@iden3/js-iden3-core';
 import { Proof, Hash, rootFromProof, verifyProof } from '@iden3/js-merkletree';
 import { Merklizer, Options } from '@iden3/js-jsonld-merklization';
 import { PublicKey, poseidon } from '@iden3/js-crypto';
-import { CredentialStatusResolverRegistry } from '../credentials';
+import { CredentialRequest, CredentialStatusResolverRegistry } from '../credentials';
 import { getUserDIDFromCredential } from '../credentials/utils';
 import { byteEncoder, validateDIDDocumentAuth } from '../utils';
-import { MerklizedRootPosition, ProofType, SubjectPosition } from './constants';
+import {
+  CredentialStatusType,
+  MerklizedRootPosition,
+  ProofType,
+  SubjectPosition,
+  VerifiableConstants
+} from './constants';
 import {
   calculateCoreSchemaHash,
   CoreClaimCreationOptions,
@@ -29,6 +36,7 @@ import {
 
 import * as jsonld from 'jsonld/lib';
 import * as ldcontext from 'jsonld/lib/context';
+import { JsonDocumentObject } from '../iden3comm';
 
 /**
  * W3C Verifiable credential
@@ -45,11 +53,109 @@ export class W3CCredential {
   refreshService?: RefreshService;
   displayMethod?: DisplayMethod;
   issuanceDate?: string;
-  credentialSubject: { [key: string]: object | string | number | boolean } = {};
+  credentialSubject: JsonDocumentObject = {};
   credentialStatus!: CredentialStatus;
   issuer = '';
   credentialSchema!: CredentialSchema;
   proof?: object | unknown[];
+
+  /**
+   *
+   * @param issuer - DID of the issuer
+   * @param request - Credential request
+   * @returns - W3C Credential
+   */
+  static fromCredentialRequest(issuer: DID, request: CredentialRequest): W3CCredential {
+    if (!request.id) {
+      throw new Error('Credential id is required');
+    }
+    if (!request.context) {
+      throw new Error('Credential context is required');
+    }
+
+    const context = [
+      VerifiableConstants.JSONLD_SCHEMA.W3C_CREDENTIAL_2018,
+      VerifiableConstants.JSONLD_SCHEMA.IDEN3_CREDENTIAL,
+      ...request.context
+    ];
+
+    const credentialType = [
+      VerifiableConstants.CREDENTIAL_TYPE.W3C_VERIFIABLE_CREDENTIAL,
+      request.type
+    ];
+
+    const credentialSubject = request.credentialSubject;
+    credentialSubject['type'] = request.type;
+
+    const cr = new W3CCredential();
+    cr.id = request.id;
+    cr['@context'] = context;
+    cr.type = credentialType;
+    cr.credentialSubject = credentialSubject;
+    cr.issuer = issuer.string();
+    cr.credentialSchema = {
+      id: request.credentialSchema,
+      type: VerifiableConstants.JSON_SCHEMA_VALIDATOR
+    };
+    cr.credentialStatus = W3CCredential.buildCredentialStatus(request, issuer);
+
+    request.expiration && (cr.expirationDate = new Date(request.expiration).toISOString());
+    request.refreshService && (cr.refreshService = request.refreshService);
+    request.displayMethod && (cr.displayMethod = request.displayMethod);
+    request.issuanceDate && (cr.issuanceDate = new Date(request.issuanceDate).toISOString());
+
+    return cr;
+  }
+
+  /**
+   * Builds credential status
+   * @param {CredentialRequest} request
+   * @returns `CredentialStatus`
+   */
+  private static buildCredentialStatus(request: CredentialRequest, issuer: DID): CredentialStatus {
+    const credentialStatus: CredentialStatus = {
+      id: request.revocationOpts.id,
+      type: request.revocationOpts.type,
+      revocationNonce: request.revocationOpts.nonce
+    };
+
+    switch (request.revocationOpts.type) {
+      case CredentialStatusType.SparseMerkleTreeProof:
+        return {
+          ...credentialStatus,
+          id: `${credentialStatus.id.replace(/\/$/, '')}/${credentialStatus.revocationNonce}`
+        };
+      case CredentialStatusType.Iden3ReverseSparseMerkleTreeProof:
+        return {
+          ...credentialStatus,
+          id: request.revocationOpts.issuerState
+            ? `${credentialStatus.id.replace(/\/$/, '')}/node?state=${
+                request.revocationOpts.issuerState
+              }`
+            : `${credentialStatus.id.replace(/\/$/, '')}`
+        };
+      case CredentialStatusType.Iden3OnchainSparseMerkleTreeProof2023: {
+        const issuerId = DID.idFromDID(issuer);
+        const chainId = getChainId(DID.blockchainFromId(issuerId), DID.networkIdFromId(issuerId));
+        const searchParams = [
+          ['revocationNonce', request.revocationOpts.nonce?.toString() || ''],
+          ['contractAddress', `${chainId}:${request.revocationOpts.id}`],
+          ['state', request.revocationOpts.issuerState || '']
+        ]
+          .filter(([, value]) => Boolean(value))
+          .map(([key, value]) => `${key}=${value}`)
+          .join('&');
+
+        return {
+          ...credentialStatus,
+          // `[did]:[methodid]:[chain]:[network]:[id]/credentialStatus?(revocationNonce=value)&[contractAddress=[chainID]:[contractAddress]]&(state=issuerState)`
+          id: `${issuer.string()}/credentialStatus?${searchParams}`
+        };
+      }
+      default:
+        return credentialStatus;
+    }
+  }
 
   toJSON() {
     return {
@@ -95,7 +201,7 @@ export class W3CCredential {
 
   static fromJSON(obj: any): W3CCredential {
     const w = new W3CCredential();
-    Object.assign(w, obj);
+    Object.assign(w, structuredClone(obj));
     w.proof = Array.isArray(w.proof)
       ? w.proof.map(W3CCredential.proofFromJSON)
       : W3CCredential.proofFromJSON(w.proof);
@@ -415,7 +521,7 @@ export class W3CCredential {
     resolverURL: string
   ): Promise<boolean> {
     await validateDIDDocumentAuth(proof.issuerData.id, resolverURL, proof.issuerData.state.value);
-    // root from proof == issuerData.state.сlaimsTreeRoot
+    // root from proof == issuerData.state.claimsTreeRoot
     const { hi, hv } = coreClaim.hiHv();
     const rootFromProofValue = await rootFromProof(proof.mtp, hi, hv);
     if (!rootFromProofValue.equals(proof.issuerData.state.claimsTreeRoot)) {

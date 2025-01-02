@@ -1,3 +1,4 @@
+import { ProofJSON } from '@iden3/js-merkletree';
 /**
  * state information of identity from chain.
  *
@@ -44,4 +45,53 @@ export interface RootInfo {
   replacedAtTimestamp: bigint;
   createdAtBlock: bigint;
   replacedAtBlock: bigint;
+  proof?: ProofJSON;
+}
+
+/**
+ * identity state message
+ *
+ * @public
+ * @interface IdentityStateMsg
+ */
+export interface IdentityStateMsg {
+  timestamp: number;
+  id: bigint;
+  state: bigint;
+  replacedAtTimestamp: number;
+}
+
+/**
+ * global state message
+ *
+ * @public
+ * @interface GlobalStateMsg
+ */
+export interface GlobalStateMsg {
+  timestamp: number;
+  idType: string;
+  root: bigint;
+  replacedAtTimestamp: number;
+}
+
+/**
+ * identity state update
+ *
+ * @public
+ * @interface IdentityStateUpdate
+ */
+export interface IdentityStateUpdate {
+  idStateMsg: IdentityStateMsg;
+  signature: string;
+}
+
+/**
+ * global state update
+ *
+ * @public
+ * @interface GlobalStateUpdate
+ */
+export interface GlobalStateUpdate {
+  globalStateMsg: GlobalStateMsg;
+  signature: string;
 }

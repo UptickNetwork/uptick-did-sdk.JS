@@ -1,5 +1,6 @@
 import {
   CredentialsOfferMessage,
+  CredentialsOnchainOfferMessage,
   FetchHandler,
   IPackageManager,
   IDataStorage,
@@ -23,6 +24,7 @@ import {
 import {
   MOCK_STATE_STORAGE,
   RHS_URL,
+  RPC_URL,
   SEED_ISSUER,
   SEED_USER,
   createIdentity,
@@ -31,12 +33,19 @@ import {
   registerKeyProvidersInMemoryKMS
 } from '../helpers';
 
+import { OnchainIssuer } from '../../src/storage/blockchain/onchain-issuer';
+import { defaultEthConnectionConfig } from '../../src';
+
 import * as uuid from 'uuid';
 import { expect } from 'chai';
-import fetchMock from '@gr2m/fetch-mock';
 import path from 'path';
+import nock from 'nock';
 
 describe('fetch', () => {
+  afterEach(() => {
+    nock.cleanAll();
+  });
+
   let idWallet: IdentityWallet;
   let credWallet: CredentialWallet;
 
@@ -133,7 +142,14 @@ describe('fetch', () => {
       proofService.verifyState.bind(proofService)
     );
     fetchHandler = new FetchHandler(packageMgr, {
-      credentialWallet: credWallet
+      credentialWallet: credWallet,
+      onchainIssuer: new OnchainIssuer([
+        {
+          ...defaultEthConnectionConfig,
+          url: RPC_URL,
+          chainId: 80002
+        }
+      ])
     });
 
     msgHandler = new MessageHandler({
@@ -143,8 +159,7 @@ describe('fetch', () => {
   });
 
   it('fetch credential issued to genesis did', async () => {
-    fetchMock.spy();
-    fetchMock.post(agentUrl, JSON.parse(issuanceResponseMock));
+    nock(agentUrl).post('/').reply(200, issuanceResponseMock);
     const { did: userDID, credential: cred } = await createIdentity(idWallet, {
       seed: SEED_USER
     });
@@ -182,7 +197,6 @@ describe('fetch', () => {
     const w3cCred = W3CCredential.fromJSON(JSON.parse(issuanceResponseMock).body.credential);
 
     expect(Object.entries(res[0]).toString()).to.equal(Object.entries(w3cCred).toString());
-    fetchMock.restore();
   });
 
   it('handle credential fetch and issuance requests', async () => {
@@ -235,25 +249,25 @@ describe('fetch', () => {
 
     expect(res).to.be.a('Uint8Array');
 
-    const issueanceMsg = await FetchHandler.unpackMessage<CredentialIssuanceMessage>(
+    const issuanceMsg = await FetchHandler.unpackMessage<CredentialIssuanceMessage>(
       packageMgr,
       res,
       PROTOCOL_CONSTANTS.PROTOCOL_MESSAGE_TYPE.CREDENTIAL_ISSUANCE_RESPONSE_MESSAGE_TYPE
     );
 
-    expect(issueanceMsg).not.to.be.undefined;
-    expect(issueanceMsg.body).not.to.be.undefined;
-    expect(issueanceMsg.body?.credential).not.to.be.undefined;
-    expect(issueanceMsg.body?.credential.id).to.equal(issuedCred.id);
+    expect(issuanceMsg).not.to.be.undefined;
+    expect(issuanceMsg.body).not.to.be.undefined;
+    expect(issuanceMsg.body?.credential).not.to.be.undefined;
+    expect(issuanceMsg.body?.credential.id).to.equal(issuedCred.id);
 
     const newId = uuid.v4();
 
-    issueanceMsg.body = {
-      credential: { ...issueanceMsg.body?.credential, id: newId } as W3CCredential
+    issuanceMsg.body = {
+      credential: { ...issuanceMsg.body?.credential, id: newId } as W3CCredential
     };
 
     await fetchHandler.handleIssuanceResponseMessage(
-      byteEncoder.encode(JSON.stringify(issueanceMsg))
+      byteEncoder.encode(JSON.stringify(issuanceMsg))
     );
 
     const cred2 = await credWallet.findById(newId);
@@ -277,14 +291,43 @@ describe('fetch', () => {
       offer,
       {}
     );
-    fetchMock.restore();
-    fetchMock.spy();
-    fetchMock.post(agentUrl, issuanceResponseMock);
+    nock(agentUrl).post('/').reply(200, issuanceResponseMock);
     expect(await credWallet.list()).to.have.length(4);
 
     const response = await msgHandler.handleMessage(bytes, {});
-    // credential saved after handleing message via msgHandler
+    // credential saved after handling message via msgHandler
     expect(response).to.be.null;
     expect(await credWallet.list()).to.have.length(5);
+  });
+
+  it('onchain credential offer', async () => {
+    const { did: userDID } = await createIdentity(idWallet, {
+      seed: SEED_ISSUER
+    });
+
+    const onchainOffer: CredentialsOnchainOfferMessage = {
+      id: uuid.v4(),
+      typ: PROTOCOL_CONSTANTS.MediaType.PlainMessage,
+      type: PROTOCOL_CONSTANTS.PROTOCOL_MESSAGE_TYPE.CREDENTIAL_ONCHAIN_OFFER_MESSAGE_TYPE,
+      thid: uuid.v4(),
+      body: {
+        credentials: [{ id: '6', description: 'balance credential' }],
+        transaction_data: {
+          contract_address: '0x19875eA86503734f2f9Ed461463e0312A3b42563',
+          method_id: '0',
+          chain_id: 80002
+        }
+      },
+      from: 'did:polygonid:polygon:amoy:2qQ68JkRcf3xyDFsGSWU5QqxbKpzM75quxS628JgvJ',
+      to: userDID.string()
+    };
+
+    const bytes = await packageMgr.packMessage(
+      PROTOCOL_CONSTANTS.MediaType.PlainMessage,
+      onchainOffer,
+      {}
+    );
+    const response = await fetchHandler.handleOnchainOffer(bytes);
+    console.log(response);
   });
 });

@@ -74,6 +74,29 @@ export interface IPackageManager {
    * @returns MediaType
    */
   getMediaType(envelope: string): MediaType;
+
+  /**
+   * gets supported media types by packer manager
+   *
+   * @returns MediaType[]
+   */
+  getSupportedMediaTypes(): MediaType[];
+
+  /**
+   * gets supported accept profiles by packer manager
+   *
+   * @returns string[]
+   */
+  getSupportedProfiles(): string[];
+
+  /**
+   * returns true if media type and algorithms supported by packer manager
+   *
+   * @param {MediaType} mediaType
+   * @param {string} profile
+   * @returns {boolean}
+   */
+  isProfileSupported(mediaType: MediaType, profile: string): boolean;
 }
 /**
  * EnvelopeStub is used to stub the jwt based envelops

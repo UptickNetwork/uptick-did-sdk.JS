@@ -77,12 +77,10 @@ describe('MessageHandler', () => {
     const dataStorage = getInMemoryDataStorage(MOCK_STATE_STORAGE);
 
     const dummyHandler = {
-      handle: async (msg: BasicMessage) => {
-        if (msg.type === 'msg-type-req') {
-          return {
-            type: 'msg-type-resp'
-          };
-        }
+      handle: async () => {
+        return {
+          type: 'msg-type-resp'
+        };
       }
     } as unknown as AbstractMessageHandler;
     const resolvers = new CredentialStatusResolverRegistry();
@@ -149,8 +147,7 @@ describe('MessageHandler', () => {
       body: {
         callbackUrl: 'http://localhost:8080/callback?id=1234442-123123-123123',
         reason: 'reason',
-        message: 'mesage',
-        did_doc: {},
+        message: 'message',
         scope: [
           {
             id: 1,
@@ -198,7 +195,7 @@ describe('MessageHandler', () => {
     const dummyHandlerResponseMsg = await dummyHandler.handle(
       {
         type: 'msg-type-req'
-      } as BasicMessage,
+      } as unknown as BasicMessage,
       {}
     );
 

@@ -39,7 +39,9 @@ import {
   JSONObject,
   ZeroKnowledgeProofRequest,
   ZeroKnowledgeProofResponse,
-  PROTOCOL_CONSTANTS
+  PROTOCOL_CONSTANTS,
+  VerifiablePresentation,
+  JsonDocumentObject
 } from '../iden3comm';
 import { cacheLoader } from '../schema-processor';
 import { ICircuitStorage, IStateStorage } from '../storage';
@@ -124,11 +126,19 @@ export interface IProofService {
    *
    * @param {Uint8Array} hash - challenge that will be signed
    * @param {DID} did - identity that will generate a proof
-   * @param {Number} profileNonce - identity that will generate a proof
    * @param {CircuitId} circuitId - circuit id for authentication
    * @returns `Promise<Uint8Array>`
    */
   generateAuthV2Inputs(hash: Uint8Array, did: DID, circuitId: CircuitId): Promise<Uint8Array>;
+
+  /**
+   * generates auth inputs
+   *
+   * @param {Uint8Array} hash - challenge that will be signed
+   * @param {DID} did - identity that will generate a proof
+   * @returns `Promise<ZKProof>`
+   */
+  generateAuthV2Proof(hash: Uint8Array, did: DID): Promise<ZKProof>;
 
   /**
    * state verification function
@@ -219,7 +229,7 @@ export class ProofService implements IProofService {
     const verifyContext: VerifyContext = {
       pubSignals: proofResp.pub_signals,
       query: opts.query,
-      verifiablePresentation: proofResp.vp as JSON,
+      verifiablePresentation: proofResp.vp,
       sender: opts.sender,
       challenge: BigInt(proofResp.id),
       opts: opts.opts,
@@ -286,7 +296,7 @@ export class ProofService implements IProofService {
     }
 
     const propertiesMetadata = parseCredentialSubject(
-      proofReq.query.credentialSubject as JSONObject
+      proofReq.query.credentialSubject as JsonDocumentObject
     );
     if (!propertiesMetadata.length) {
       throw new Error('no queries in zkp request');
@@ -339,7 +349,7 @@ export class ProofService implements IProofService {
     );
 
     const sdQueries = queriesMetadata.filter((q) => q.operator === Operators.SD);
-    let vp: object | undefined;
+    let vp: VerifiablePresentation | undefined;
     if (sdQueries.length) {
       vp = createVerifiablePresentation(
         context,
@@ -428,7 +438,7 @@ export class ProofService implements IProofService {
       const [first, ...rest] = queryMetadata.fieldName.split('.');
       let v = credential.credentialSubject[first];
       for (const part of rest) {
-        v = (v as JSONObject)[part];
+        v = (v as JsonDocumentObject)[part];
       }
       if (typeof v === 'undefined') {
         throw new Error(`credential doesn't contain value for field ${queryMetadata.fieldName}`);
@@ -485,6 +495,14 @@ export class ProofService implements IProofService {
     authInputs.challenge = challenge;
     authInputs.gistProof = gistProof;
     return authInputs.inputsMarshal();
+  }
+
+  /** {@inheritdoc IProofService.generateAuthV2Proof} */
+  async generateAuthV2Proof(challenge: Uint8Array, did: DID): Promise<ZKProof> {
+    const authInputs = await this.generateAuthV2Inputs(challenge, did, CircuitId.AuthV2);
+
+    const zkProof = await this._prover.generate(authInputs, CircuitId.AuthV2);
+    return zkProof;
   }
 
   async verifyState(

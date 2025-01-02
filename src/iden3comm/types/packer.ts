@@ -2,13 +2,14 @@ import { DID } from '@iden3/js-iden3-core';
 import { DataPrepareHandlerFunc, VerificationHandlerFunc } from '../packers';
 import { ProvingMethodAlg } from '@iden3/js-jwz';
 import { CircuitId } from '../../circuits';
-import { MediaType } from '../constants';
+import { MediaType, PROTOCOL_MESSAGE_TYPE } from '../constants';
 import { DIDDocument, VerificationMethod } from 'did-resolver';
 import { StateVerificationOpts } from './models';
+
 /**
  *  Protocol message type
  */
-export type ProtocolMessage = string;
+export type ProtocolMessage = (typeof PROTOCOL_MESSAGE_TYPE)[keyof typeof PROTOCOL_MESSAGE_TYPE];
 
 /**
  * JSONValue
@@ -22,6 +23,24 @@ export type JSONObject = {
   [x: string]: JSONValue;
 };
 
+/**
+ * JSON document object
+ */
+export type JsonDocumentObject = { [key: string]: JsonDocumentObjectValue };
+
+/**
+ * JSON document object allowed values
+ */
+export type JsonDocumentObjectValue =
+  | string
+  | number
+  | boolean
+  | JsonDocumentObject
+  | JsonDocumentObjectValue[];
+
+/**
+ * Basic message with all possible fields optional
+ */
 export type BasicMessage = {
   id: string;
   typ?: MediaType;
@@ -30,6 +49,16 @@ export type BasicMessage = {
   body?: unknown;
   from?: string;
   to?: string;
+  created_time?: number;
+  expires_time?: number;
+};
+
+/**
+ * Basic message with all possible fields required
+ */
+export type RequiredBasicMessage = Omit<Required<BasicMessage>, 'created_time' | 'expires_time'> & {
+  created_time?: number;
+  expires_time?: number;
 };
 
 /**
@@ -44,7 +73,7 @@ export type PackerParams = {
 export type ZKPPackerParams = PackerParams & {
   senderDID: DID;
   /** @deprecated */
-  profileNonce?: number;
+  profileNonce?: number | string;
   provingMethodAlg: ProvingMethodAlg;
 };
 
@@ -121,6 +150,21 @@ export interface IPacker {
    * @returns The media type as a MediaType.
    */
   mediaType(): MediaType;
+
+  /**
+   * gets packer envelope (supported profiles) with options
+   *
+   * @returns {string}
+   */
+  getSupportedProfiles(): string[];
+
+  /**
+   * returns true if profile is supported by packer
+   *
+   * @param {string} profile
+   * @returns {boolean}
+   */
+  isProfileSupported(profile: string): boolean;
 }
 /**
  * Params for verification of auth circuit public signals

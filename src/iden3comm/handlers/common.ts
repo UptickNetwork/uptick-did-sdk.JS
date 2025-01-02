@@ -1,13 +1,15 @@
 import { getRandomBytes } from '@iden3/js-crypto';
 import {
-  JSONObject,
+  BasicMessage,
+  JsonDocumentObject,
   JWSPackerParams,
+  ZeroKnowledgeProofQuery,
   ZeroKnowledgeProofRequest,
   ZeroKnowledgeProofResponse
 } from '../types';
 import { mergeObjects } from '../../utils';
 import { RevocationStatus, W3CCredential } from '../../verifiable';
-import { DID } from '@iden3/js-iden3-core';
+import { DID, getUnixTimestamp } from '@iden3/js-iden3-core';
 import { IProofService } from '../../proof';
 import { CircuitId } from '../../circuits';
 import { MediaType } from '../constants';
@@ -18,11 +20,11 @@ import { Signer } from 'ethers';
  * Returns a Map where the key is the groupId and the value is an object containing the query and linkNonce.
  *
  * @param requestScope - An array of ZeroKnowledgeProofRequest objects.
- * @returns A Map<number, { query: JSONObject; linkNonce: number }> representing the grouped queries.
+ * @returns A Map<number, { query: ZeroKnowledgeProofQuery; linkNonce: number }> representing the grouped queries.
  */
 const getGroupedQueries = (
   requestScope: ZeroKnowledgeProofRequest[]
-): Map<number, { query: JSONObject; linkNonce: number }> =>
+): Map<number, { query: ZeroKnowledgeProofQuery; linkNonce: number }> =>
   requestScope.reduce((acc, proofReq) => {
     const groupId = proofReq.query.groupId as number | undefined;
     if (!groupId) {
@@ -39,8 +41,8 @@ const getGroupedQueries = (
     }
 
     const credentialSubject = mergeObjects(
-      existedData.query.credentialSubject as JSONObject,
-      proofReq.query.credentialSubject as JSONObject
+      existedData.query.credentialSubject as JsonDocumentObject,
+      proofReq.query.credentialSubject as JsonDocumentObject
     );
 
     acc.set(groupId, {
@@ -48,13 +50,13 @@ const getGroupedQueries = (
       query: {
         skipClaimRevocationCheck:
           existedData.query.skipClaimRevocationCheck || proofReq.query.skipClaimRevocationCheck,
-        ...(existedData.query as JSONObject),
+        ...existedData.query,
         credentialSubject
       }
     });
 
     return acc;
-  }, new Map<number, { query: JSONObject; linkNonce: number }>());
+  }, new Map<number, { query: ZeroKnowledgeProofQuery; linkNonce: number }>());
 
 /**
  * Processes zero knowledge proof requests.
@@ -132,4 +134,15 @@ export const processZeroKnowledgeProofRequests = async (
   }
 
   return zkpResponses;
+};
+
+/**
+ * Verifies that the expires_time field of a message is not in the past. Throws an error if it is.
+ *
+ * @param message - Basic message to verify.
+ */
+export const verifyExpiresTime = (message: BasicMessage) => {
+  if (message?.expires_time && message.expires_time < getUnixTimestamp(new Date())) {
+    throw new Error('Message expired');
+  }
 };
