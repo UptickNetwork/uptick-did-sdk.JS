@@ -39,7 +39,6 @@ export STATE_CONTRACT_ADDRESS="state contract address"
 export RHS_CONTRACT_ADDRESS="reverse hash service contract address"
 ```
 
-
 ## Documentation
 
 ### Generate documentation
@@ -57,7 +56,6 @@ export RHS_CONTRACT_ADDRESS="reverse hash service contract address"
 3. ```bash
         npm run doc:watch:website
     ```
-
 
 ## License
 
