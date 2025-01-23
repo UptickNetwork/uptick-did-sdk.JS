@@ -49,11 +49,13 @@ export RHS_CONTRACT_ADDRESS="reverse hash service contract address"
         const DOCS_DIR = '../js-sdk-tutorials/docs/api';
     ```
 
-2. ```bash
+2. 
+   ```bash
         npm run tsc:declaration:watch
     ```
 
-3. ```bash
+3. 
+   ```bash
         npm run doc:watch:website
     ```
 
