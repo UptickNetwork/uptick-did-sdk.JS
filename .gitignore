@@ -24,8 +24,7 @@ dist
 docs
 temp
 .DS_Store
-.idea
-.vscode
+.idea/
 /tests/proofs/testdata
 .env
-.vscode
+.vscode/
