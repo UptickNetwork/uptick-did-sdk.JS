@@ -27,4 +27,6 @@ temp
 .idea/
 /tests/proofs/testdata
 .env
+
+#vscode
 .vscode/
