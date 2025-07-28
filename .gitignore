@@ -15,7 +15,7 @@
 # vendor/
 
 # idea
-.idea
+.idea/
 *.xml
 
 /node_modules
@@ -27,6 +27,8 @@ temp
 .idea/
 /tests/proofs/testdata
 .env
+
+
 
 #vscode
 .vscode/
