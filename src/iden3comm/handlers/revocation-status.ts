@@ -3,7 +3,6 @@ import { MediaType } from '../constants';
 import {
   BasicMessage,
   IPackageManager,
-  JWSPackerParams,
   RevocationStatusRequestMessage,
   RevocationStatusResponseMessage
 } from '../types';
@@ -13,9 +12,14 @@ import * as uuid from 'uuid';
 import { RevocationStatus } from '../../verifiable';
 import { TreeState } from '../../circuits';
 import { byteEncoder } from '../../utils';
-import { proving } from '@iden3/js-jwz';
 import { IIdentityWallet } from '../../identity';
-import { AbstractMessageHandler, IProtocolMessageHandler } from './message-handler';
+import {
+  AbstractMessageHandler,
+  BasicHandlerOptions,
+  IProtocolMessageHandler,
+  getProvingMethodAlgFromJWZ
+} from './message-handler';
+import { HandlerPackerParams, initDefaultPackerOptions, verifyExpiresTime } from './common';
 
 /**
  * Defines the options for a RevocationStatusMessageHandler.
@@ -24,10 +28,10 @@ import { AbstractMessageHandler, IProtocolMessageHandler } from './message-handl
  * @property packerOptions - Optional parameters for the JWS packer.
  * @property treeState - Optional tree state to be used.
  */
-export type RevocationStatusMessageHandlerOptions = {
+export type RevocationStatusMessageHandlerOptions = BasicHandlerOptions & {
   senderDid: DID;
   mediaType: MediaType;
-  packerOptions?: JWSPackerParams;
+  packerOptions?: HandlerPackerParams;
   treeState?: TreeState;
 };
 
@@ -59,9 +63,9 @@ export interface IRevocationStatusHandler {
 }
 
 /** RevocationStatusHandlerOptions represents revocation status handler options */
-export type RevocationStatusHandlerOptions = {
+export type RevocationStatusHandlerOptions = BasicHandlerOptions & {
   mediaType: MediaType;
-  packerOptions?: JWSPackerParams;
+  packerOptions?: HandlerPackerParams;
   treeState?: TreeState;
 };
 
@@ -188,12 +192,10 @@ export class RevocationStatusHandler
       };
     }
 
-    if (opts.mediaType === MediaType.SignedMessage && !opts.packerOptions) {
-      throw new Error(`jws packer options are required for ${MediaType.SignedMessage}`);
-    }
-
     const rsRequest = await this.parseRevocationStatusRequest(request);
-
+    if (!opts.allowExpiredMessages) {
+      verifyExpiresTime(rsRequest);
+    }
     const response = await this.handleRevocationStatusRequestMessage(rsRequest, {
       senderDid: did,
       mediaType: opts.mediaType,
@@ -201,21 +203,19 @@ export class RevocationStatusHandler
       treeState: opts.treeState
     });
 
-    const packerOpts =
-      opts.mediaType === MediaType.SignedMessage
-        ? opts.packerOptions
-        : {
-            provingMethodAlg: proving.provingMethodGroth16AuthV2Instance.methodAlg
-          };
-
     if (!rsRequest.to) {
       throw new Error(`failed request. empty 'to' field`);
     }
-
     const senderDID = DID.parse(rsRequest.to);
-    return this._packerMgr.pack(opts.mediaType, byteEncoder.encode(JSON.stringify(response)), {
+    const packerOpts = initDefaultPackerOptions(opts.mediaType, opts.packerOptions, {
       senderDID,
-      ...packerOpts
+      provingMethodAlg:
+        opts.packerOptions?.provingMethodAlg || (await getProvingMethodAlgFromJWZ(request))
     });
+    return this._packerMgr.pack(
+      opts.mediaType,
+      byteEncoder.encode(JSON.stringify(response)),
+      packerOpts
+    );
   }
 }

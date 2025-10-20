@@ -12,11 +12,12 @@ import {
   isEthereumIdentity,
   keyPath
 } from '../../src';
-import { expect } from 'chai';
+import { describe, expect, it, beforeEach } from 'vitest';
 import { DIDResolutionResult } from 'did-resolver';
 import { ES256KSigner } from 'did-jwt';
 import { DID, getChainId, Id } from '@uptickproject/js-iden3-core';
 import { Hex } from '@iden3/js-crypto';
+import { MediaType } from '../../src/iden3comm/constants';
 
 const didExample = {
   '@context': [
@@ -216,5 +217,10 @@ describe('jws packer tests', () => {
 
     const data = await packer.unpack(tokenBytes);
     expect(data).to.not.be.undefined;
+  });
+
+  it('test getSupportedProfiles', () => {
+    const [accept] = packer.getSupportedProfiles();
+    expect(accept).to.be.eq(`iden3comm/v1;env=${MediaType.SignedMessage};alg=ES256K,ES256K-R`);
   });
 });

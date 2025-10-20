@@ -1,9 +1,16 @@
 import { Hex } from '@iden3/js-crypto';
 import { Id, buildDIDType, genesisFromEthAddress, DID } from '@uptickproject/js-iden3-core';
 import { Hash } from '@iden3/js-merkletree';
-import { DIDResolutionResult, VerificationMethod } from 'did-resolver';
-import { keccak256 } from 'js-sha3';
+import { DIDResolutionResult, VerificationMethod, DIDResolutionMetadata } from 'did-resolver';
+import { keccak256 } from 'ethers';
 import { hexToBytes } from './encoding';
+
+/**
+ * Supported DID Document Signatures
+ */
+export enum DIDDocumentSignature {
+  EthereumEip712Signature2021 = 'EthereumEip712Signature2021'
+}
 
 /**
  * Checks if state is genesis state
@@ -75,7 +82,7 @@ export const resolveDIDDocumentAuth = async (
   resolveURL: string,
   state?: Hash
 ): Promise<VerificationMethod | undefined> => {
-  let url = `${resolveURL}/${did.string().replace(/:/g, '%3A')}`;
+  let url = `${resolveURL}/${encodeURIComponent(did.string())}`;
   if (state) {
     url += `?state=${state.hex()}`;
   }
@@ -86,6 +93,62 @@ export const resolveDIDDocumentAuth = async (
   );
 };
 
+function emptyStateDID(did: DID) {
+  const id = DID.idFromDID(did);
+  const didType = buildDIDType(
+    DID.methodFromId(id),
+    DID.blockchainFromId(id),
+    DID.networkIdFromId(id)
+  );
+  const identifier = Id.idGenesisFromIdenState(didType, 0n);
+  const emptyDID = DID.parseFromId(identifier);
+
+  return emptyDID;
+}
+
+export const resolveDidDocument = async (
+  did: DID,
+  resolverUrl: string,
+  opts?: {
+    state?: Hash;
+    gist?: Hash;
+    signature?: DIDDocumentSignature;
+  }
+): Promise<DIDResolutionMetadata> => {
+  let didString = encodeURIComponent(did.string());
+  // for gist resolve we have to `hide` user did (look into resolver implementation)
+  const isGistRequest = opts?.gist && !opts.state;
+  if (isGistRequest) {
+    didString = encodeURIComponent(emptyStateDID(did).string());
+  }
+  let url = `${resolverUrl}/1.0/identifiers/${didString}`;
+
+  if (opts?.signature) {
+    url += `?signature=${opts.signature}`;
+  }
+
+  if (opts?.state) {
+    url += `${url.includes('?') ? '&' : '?'}state=${opts.state.hex()}`;
+  }
+
+  if (opts?.gist) {
+    url += `${url.includes('?') ? '&' : '?'}gist=${opts.gist.hex()}`;
+  }
+  try {
+    const resp = await fetch(url);
+    const data = await resp.json();
+    return data;
+  } catch (e) {
+    throw new Error(`Failed to resolve DID document for ${did} ${e}`);
+  }
+};
+
+const _buildDIDFromEthAddress = (didType: Uint8Array, ethAddress: Uint8Array): DID => {
+  const genesis = genesisFromEthAddress(ethAddress);
+  const identifier = new Id(didType, genesis);
+  return DID.parseFromId(identifier);
+};
+
 export const buildDIDFromEthPubKey = (didType: Uint8Array, pubKeyEth: string): DID => {
   // Use Keccak-256 hash function to get public key hash
   const hashOfPublicKey = keccak256(hexToBytes(pubKeyEth));
@@ -94,7 +157,9 @@ export const buildDIDFromEthPubKey = (didType: Uint8Array, pubKeyEth: string): D
   // Ethereum Address is '0x' concatenated with last 20 bytes
   // of the public key hash
   const ethAddr = ethAddressBuffer.slice(-20);
-  const genesis = genesisFromEthAddress(ethAddr);
-  const identifier = new Id(didType, genesis);
-  return DID.parseFromId(identifier);
+  return _buildDIDFromEthAddress(didType, ethAddr);
+};
+
+export const buildDIDFromEthAddress = (didType: Uint8Array, ethAddress: string): DID => {
+  return _buildDIDFromEthAddress(didType, hexToBytes(ethAddress));
 };

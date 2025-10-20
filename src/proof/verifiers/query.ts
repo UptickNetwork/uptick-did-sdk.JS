@@ -8,6 +8,8 @@ import { calculateCoreSchemaHash, ProofQuery, VerifiableConstants } from '../../
 import { QueryMetadata } from '../common';
 import { circuitValidator } from '../provers';
 import { JsonLd } from 'jsonld/jsonld-spec';
+import { VerifiablePresentation } from '../../iden3comm';
+import { ethers } from 'ethers';
 
 /**
  * Options to verify state
@@ -189,7 +191,7 @@ export async function validateOperators(cq: QueryMetadata, outputs: ClaimOutputs
 export async function validateDisclosureV2Circuit(
   cq: QueryMetadata,
   outputs: ClaimOutputs,
-  verifiablePresentation?: JSON,
+  verifiablePresentation?: VerifiablePresentation,
   ldLoader?: DocumentLoader
 ) {
   const bi = await fieldValueFromVerifiablePresentation(
@@ -215,7 +217,7 @@ export async function validateDisclosureV2Circuit(
 export async function validateDisclosureNativeSDSupport(
   cq: QueryMetadata,
   outputs: ClaimOutputs,
-  verifiablePresentation?: JSON,
+  verifiablePresentation?: VerifiablePresentation,
   ldLoader?: DocumentLoader
 ) {
   const bi = await fieldValueFromVerifiablePresentation(
@@ -250,7 +252,7 @@ export async function validateEmptyCredentialSubjectNoopNativeSupport(outputs: C
 
 export const fieldValueFromVerifiablePresentation = async (
   fieldName: string,
-  verifiablePresentation?: JSON,
+  verifiablePresentation?: VerifiablePresentation,
   ldLoader?: DocumentLoader
 ): Promise<bigint> => {
   if (!verifiablePresentation) {
@@ -296,3 +298,43 @@ export const fieldValueFromVerifiablePresentation = async (
 
   return await value.mtEntry();
 };
+
+export function calculateGroupId(requestIds: bigint[]): bigint {
+  const types = Array(requestIds.length).fill('uint256');
+
+  const groupID =
+    BigInt(ethers.keccak256(ethers.solidityPacked(types, requestIds))) &
+    // It should fit in a field number in the circuit (max 253 bits). With this we truncate to 252 bits for the group ID
+    BigInt('0x0FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF');
+
+  return groupID;
+}
+
+export function calculateRequestId(requestParams: string, creatorAddress: string): bigint {
+  // 0x0000000000000000FFFF...FF. Reserved first 8 bytes for the request Id type and future use
+  // 0x00010000000000000000...00. First 2 bytes for the request Id type
+  //    - 0x0000... for old request Ids with uint64
+  //    - 0x0001... for new request Ids with uint256
+  const requestId =
+    (BigInt(
+      ethers.keccak256(ethers.solidityPacked(['bytes', 'address'], [requestParams, creatorAddress]))
+    ) &
+      BigInt('0x0000000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF')) +
+    BigInt('0x0001000000000000000000000000000000000000000000000000000000000000');
+  return requestId;
+}
+
+export function calculateMultiRequestId(
+  requestIds: bigint[],
+  groupIds: bigint[],
+  creatorAddress: string
+): bigint {
+  return BigInt(
+    ethers.keccak256(
+      ethers.solidityPacked(
+        ['uint256[]', 'uint256[]', 'address'],
+        [requestIds, groupIds, creatorAddress]
+      )
+    )
+  );
+}

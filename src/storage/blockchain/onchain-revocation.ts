@@ -21,7 +21,7 @@ export class OnChainRevocationStorage {
    *
    * Creates an instance of OnChainIssuer.
    * @public
-   * @param {string} - onhcain contract address
+   * @param {string} - onchain contract address
    * @param {string} - rpc url to connect to the blockchain
    */
 
@@ -132,17 +132,12 @@ export class OnChainRevocationStorage {
     const siblings = mtp.siblings?.map((s) => s.toString());
 
     if (mtp.auxExistence) {
-      const auxIndex = BigInt(mtp.auxIndex.toString());
-      const auxValue = BigInt(mtp.auxValue.toString());
       nodeAux = {
-        key: auxIndex.toString(),
-        value: auxValue.toString()
+        key: mtp.auxIndex.toString(),
+        value: mtp.auxValue.toString()
       };
     }
-    return Proof.fromJSON({
-      existence: mtp.existence,
-      nodeAux,
-      siblings
-    });
+
+    return Proof.fromJSON({ existence: mtp.existence, node_aux: nodeAux, siblings });
   }
 }

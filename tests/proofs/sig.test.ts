@@ -19,14 +19,15 @@ import { RootInfo, StateProof } from '../../src/storage/entities/state';
 import path from 'path';
 import { byteEncoder } from '../../src';
 import { ZeroKnowledgeProofRequest } from '../../src/iden3comm';
-import { Blockchain, DID, DidMethod, NetworkId } from '@uptickproject/js-iden3-core';
-import { expect } from 'chai';
+import { Blockchain, DID, DidMethod, NetworkId } from '@iden3/js-iden3-core';
+import { describe, expect, it, beforeEach } from 'vitest';
 import { CredentialStatusResolverRegistry } from '../../src/credentials';
 import { RHSResolver } from '../../src/credentials';
 import { JsonRpcProvider } from 'ethers';
 import { RPC_URL } from '../helpers';
+import { schemaLoaderForTests } from '../mocks/schema';
 
-describe('sig proofs', () => {
+describe.sequential('sig proofs', () => {
   let idWallet: IdentityWallet;
   let credWallet: CredentialWallet;
 
@@ -38,6 +39,7 @@ describe('sig proofs', () => {
   let userDID: DID;
   let issuerDID: DID;
   let circuitStorage: ICircuitStorage;
+  let merklizeOpts;
 
   const mockStateStorage: IStateStorage = {
     getLatestStateById: async () => {
@@ -104,10 +106,18 @@ describe('sig proofs', () => {
     );
     credWallet = new CredentialWallet(dataStorage, resolvers);
     idWallet = new IdentityWallet(kms, dataStorage, credWallet);
-
-    proofService = new ProofService(idWallet, credWallet, circuitStorage, mockStateStorage, {
-      ipfsNodeURL
-    });
+    merklizeOpts = {
+      documentLoader: schemaLoaderForTests({
+        ipfsNodeURL
+      })
+    };
+    proofService = new ProofService(
+      idWallet,
+      credWallet,
+      circuitStorage,
+      mockStateStorage,
+      merklizeOpts
+    );
 
     const seedPhraseIssuer: Uint8Array = byteEncoder.encode('seedseedseedseedseedseedseedseed');
     const seedPhrase: Uint8Array = byteEncoder.encode('seedseedseedseedseedseedseeduser');
@@ -149,7 +159,7 @@ describe('sig proofs', () => {
         id: rhsUrl
       }
     };
-    const issuerCred = await idWallet.issueCredential(issuerDID, claimReq);
+    const issuerCred = await idWallet.issueCredential(issuerDID, claimReq, merklizeOpts);
 
     await credWallet.save(issuerCred);
 
@@ -210,7 +220,7 @@ describe('sig proofs', () => {
         id: rhsUrl
       }
     };
-    const issuerCred = await idWallet.issueCredential(issuerDID, claimReq);
+    const issuerCred = await idWallet.issueCredential(issuerDID, claimReq, merklizeOpts);
 
     await credWallet.save(issuerCred);
 
@@ -309,7 +319,7 @@ describe('sig proofs', () => {
         scope: [
           {
             id: 1,
-            circuitId: 'credentialAtomicQuerySigV2',
+            circuitId: CircuitId.AtomicQuerySigV2,
             query: {
               allowedIssuers: ['*'],
               context: 'ipfs://QmZ1zsLspwnjifxsncqDkB7EHb2pnaRnBPc5kqQcVxW5rV',
@@ -339,9 +349,7 @@ describe('sig proofs', () => {
         id: rhsUrl
       }
     };
-    const issuerCred = await idWallet.issueCredential(issuerDID, claimReq, {
-      ipfsNodeURL
-    });
+    const issuerCred = await idWallet.issueCredential(issuerDID, claimReq, merklizeOpts);
 
     await credWallet.save(issuerCred);
 
@@ -398,7 +406,7 @@ describe('sig proofs', () => {
         price: 10,
         deliveryTime: '2023-07-11T16:05:51.140Z',
         postalProviderInformation: {
-          name: 'ukr posta',
+          name: 'postal provider',
           officeNo: 1
         },
         homeAddress: {
@@ -413,9 +421,7 @@ describe('sig proofs', () => {
         id: rhsUrl
       }
     };
-    const issuedCred = await idWallet.issueCredential(issuerDID, claimReq, {
-      ipfsNodeURL
-    });
+    const issuedCred = await idWallet.issueCredential(issuerDID, claimReq, merklizeOpts);
 
     await credWallet.save(issuedCred);
 
@@ -430,7 +436,7 @@ describe('sig proofs', () => {
         deliveryTime: '2023-08-12T11:47:50+00:00',
         homeAddress: {
           expectedFrom: '2023-08-12T11:47:50+00:00',
-          line1: 'Kyiv, Zdanovskoi Y. 35',
+          line1: 'Kyiv, Street One Y. 35',
           line2: 'apt.1'
         },
         id: userDID.string(),
@@ -452,9 +458,7 @@ describe('sig proofs', () => {
       }
     };
 
-    const deliveryCred = await idWallet.issueCredential(issuerDID, deliveryClaimReq, {
-      ipfsNodeURL
-    });
+    const deliveryCred = await idWallet.issueCredential(issuerDID, deliveryClaimReq, merklizeOpts);
 
     await credWallet.save(deliveryCred);
 
@@ -477,7 +481,7 @@ describe('sig proofs', () => {
     expect(credsForMyUserDID.length).to.equal(1);
     const vpReq = {
       id: 1,
-      circuitId: 'credentialAtomicQuerySigV2',
+      circuitId: CircuitId.AtomicQuerySigV2,
       query
     };
     const { proof, vp } = await proofService.generateProof(vpReq, userDID);
@@ -485,22 +489,22 @@ describe('sig proofs', () => {
 
     expect(vp).to.deep.equal({
       '@context': ['https://www.w3.org/2018/credentials/v1'],
-      '@type': 'VerifiablePresentation',
+      type: 'VerifiablePresentation',
       verifiableCredential: {
         '@context': [
           'https://www.w3.org/2018/credentials/v1',
           'ipfs://QmQXQ5gBNfJuc9QXy5pGbaVfLxzFjCDAvPs4Fa43BaU1U4'
         ],
-        '@type': ['VerifiableCredential', 'DeliveryAddress'],
+        type: ['VerifiableCredential', 'DeliveryAddress'],
         credentialSubject: {
-          '@type': 'DeliveryAddress',
-          postalProviderInformation: { name: 'ukr posta' }
+          type: 'DeliveryAddress',
+          postalProviderInformation: { name: 'postal provider' }
         }
       }
     });
     const deliveryVPReq = {
       id: 1,
-      circuitId: 'credentialAtomicQuerySigV2',
+      circuitId: CircuitId.AtomicQuerySigV2,
       query: {
         ...deliveryCredQuery,
         credentialSubject: { 'postalProviderInformation.insured': {} }
@@ -514,15 +518,15 @@ describe('sig proofs', () => {
 
     expect(deliveryVP).to.deep.equal({
       '@context': ['https://www.w3.org/2018/credentials/v1'],
-      '@type': 'VerifiablePresentation',
+      type: 'VerifiablePresentation',
       verifiableCredential: {
         '@context': [
           'https://www.w3.org/2018/credentials/v1',
           'ipfs://QmZreEq1z5tMAuNBNTXjfpYMQbQ8KL7YkkVBt5nG1bUqJT'
         ],
-        '@type': ['VerifiableCredential', 'DeliverAddressMultiTest'],
+        type: ['VerifiableCredential', 'DeliverAddressMultiTest'],
         credentialSubject: {
-          '@type': 'DeliverAddressMultiTest',
+          type: 'DeliverAddressMultiTest',
           postalProviderInformation: { insured: false }
         }
       }
@@ -540,7 +544,7 @@ describe('sig proofs', () => {
         reason: 'test flow',
         scope: [
           {
-            circuitId: 'credentialAtomicQueryV3-beta.1',
+            circuitId: CircuitId.AtomicQueryV3,
             id: 1711115116,
             query: {
               allowedIssuers: ['*'],
@@ -573,9 +577,7 @@ describe('sig proofs', () => {
         id: rhsUrl
       }
     };
-    const issuerCred = await idWallet.issueCredential(issuerDID, claimReq, {
-      ipfsNodeURL
-    });
+    const issuerCred = await idWallet.issueCredential(issuerDID, claimReq, merklizeOpts);
 
     await credWallet.save(issuerCred);
 
@@ -612,7 +614,7 @@ describe('sig proofs', () => {
         reason: 'test flow',
         scope: [
           {
-            circuitId: 'credentialAtomicQueryV3-beta.1',
+            circuitId: CircuitId.AtomicQueryV3,
             id: 1711115116,
             query: {
               allowedIssuers: ['*'],
@@ -646,9 +648,7 @@ describe('sig proofs', () => {
         id: rhsUrl
       }
     };
-    const issuerCred = await idWallet.issueCredential(issuerDID, claimReq, {
-      ipfsNodeURL
-    });
+    const issuerCred = await idWallet.issueCredential(issuerDID, claimReq, merklizeOpts);
 
     await credWallet.save(issuerCred);
 

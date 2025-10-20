@@ -36,13 +36,11 @@ import {
   RHS_CONTRACT_ADDRESS
 } from '../../helpers';
 
-import chai from 'chai';
 import path from 'path';
-import spies from 'chai-spies';
 import { JsonRpcProvider, Wallet } from 'ethers';
 import { getRandomBytes } from '@iden3/js-crypto';
-chai.use(spies);
-const expect = chai.expect;
+import { schemaLoaderForTests } from '../../mocks/schema';
+import { describe, expect, it, beforeEach } from 'vitest';
 
 describe('parse credential status with type Iden3OnchainSparseMerkleTreeProof2023:', () => {
   const testCases = [
@@ -142,7 +140,14 @@ describe('parse credential status with type Iden3OnchainSparseMerkleTreeProof202
 
   for (const testCase of testCases) {
     it(testCase.name, () => {
-      const status = new OnChainResolver([]);
+      const status = new OnChainResolver([
+        {
+          ...defaultEthConnectionConfig,
+          contractAddress: STATE_CONTRACT,
+          chainId: 80002,
+          url: RPC_URL
+        }
+      ]);
 
       if (testCase.error) {
         expect(() => status.extractCredentialStatusInfo(testCase.input)).to.throw(testCase.error);
@@ -164,6 +169,7 @@ describe('onchain revocation checks', () => {
   let storage: OnChainRevocationStorage;
   let signer: Wallet;
   let onchainResolver: OnChainResolver;
+  let merklizeOpts;
 
   const createCredRequest = (
     credentialSubjectId: string,
@@ -241,7 +247,12 @@ describe('onchain revocation checks', () => {
     idWallet = new IdentityWallet(registerKeyProvidersInMemoryKMS(), dataStorage, credWallet, {
       credentialStatusPublisherRegistry
     });
-    proofService = new ProofService(idWallet, credWallet, circuitStorage, ethStorage);
+
+    merklizeOpts = {
+      documentLoader: schemaLoaderForTests()
+    };
+
+    proofService = new ProofService(idWallet, credWallet, circuitStorage, ethStorage, merklizeOpts);
   });
 
   it('issuer has genesis state', async () => {
@@ -264,7 +275,7 @@ describe('onchain revocation checks', () => {
 
     const claimReq: CredentialRequest = createCredRequest(userDID.string());
 
-    const issuerCred = await idWallet.issueCredential(issuerDID, claimReq);
+    const issuerCred = await idWallet.issueCredential(issuerDID, claimReq, merklizeOpts);
 
     await credWallet.save(issuerCred);
 
@@ -335,7 +346,7 @@ describe('onchain revocation checks', () => {
     });
 
     const { did: issuerDID, credential: issuerAuthCredential } = await createIdentity(idWallet, {
-      seed: byteEncoder.encode('soedseedseedseedseedseedseedseed'),
+      seed: byteEncoder.encode('seedseedseedseedseedseed11issuer'),
       revocationOpts: {
         id,
         type: CredentialStatusType.Iden3OnchainSparseMerkleTreeProof2023,
@@ -350,7 +361,7 @@ describe('onchain revocation checks', () => {
     const callBackUseCase = new Promise((resolve) => {
       (async () => {
         const { did: userDID, credential: userAuthCredential } = await createIdentity(idWallet, {
-          seed: byteEncoder.encode('seedseedseedseedseedseedseedseex'),
+          seed: byteEncoder.encode('seedseedseedseedseedseedseeduser'),
           revocationOpts: {
             id,
             type: CredentialStatusType.Iden3OnchainSparseMerkleTreeProof2023,
@@ -363,7 +374,11 @@ describe('onchain revocation checks', () => {
                   }
                 });
 
-                const issuerCred = await idWallet.issueCredential(issuerDID, claimReq);
+                const issuerCred = await idWallet.issueCredential(
+                  issuerDID,
+                  claimReq,
+                  merklizeOpts
+                );
 
                 expect(issuerCred.credentialSubject.id).to.equal(userDID.string());
 

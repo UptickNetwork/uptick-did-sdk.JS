@@ -1,32 +1,43 @@
 import { PROTOCOL_MESSAGE_TYPE, MediaType } from '../constants';
 import {
+  Attachment,
   BasicMessage,
   CredentialOffer,
   CredentialsOfferMessage,
-  IPackageManager,
-  JSONObject,
-  PackerParams
+  DIDDocument,
+  IPackageManager
 } from '../types';
 
-import { DID } from '@uptickproject/js-iden3-core';
+import { DID, getUnixTimestamp } from '@iden3/js-iden3-core';
 import * as uuid from 'uuid';
-import { proving } from '@iden3/js-jwz';
 import {
   Proposal,
-  ProposalRequestCredential,
   ProposalRequestMessage,
-  ProposalMessage
+  ProposalMessage,
+  ProposalRequestCredential
 } from '../types/protocol/proposal-request';
 import { IIdentityWallet } from '../../identity';
 import { byteEncoder } from '../../utils';
 import { W3CCredential } from '../../verifiable';
-import { AbstractMessageHandler, IProtocolMessageHandler } from './message-handler';
+import {
+  AbstractMessageHandler,
+  BasicHandlerOptions,
+  IProtocolMessageHandler,
+  getProvingMethodAlgFromJWZ
+} from './message-handler';
+import { HandlerPackerParams, initDefaultPackerOptions, verifyExpiresTime } from './common';
 
 /** @beta ProposalRequestCreationOptions represents proposal-request creation options */
 export type ProposalRequestCreationOptions = {
   credentials: ProposalRequestCredential[];
-  metadata?: { type: string; data?: JSONObject };
-  did_doc?: JSONObject;
+  did_doc?: DIDDocument;
+  expires_time?: Date;
+  attachments?: Attachment[];
+};
+
+/** @beta ProposalCreationOptions represents proposal creation options */
+export type ProposalCreationOptions = {
+  expires_time?: Date;
 };
 
 /**
@@ -50,7 +61,13 @@ export function createProposalRequest(
     to: receiver.string(),
     typ: MediaType.PlainMessage,
     type: PROTOCOL_MESSAGE_TYPE.PROPOSAL_REQUEST_MESSAGE_TYPE,
-    body: opts
+    body: {
+      credentials: opts.credentials,
+      did_doc: opts.did_doc
+    },
+    created_time: getUnixTimestamp(new Date()),
+    expires_time: opts?.expires_time ? getUnixTimestamp(opts.expires_time) : undefined,
+    attachments: opts.attachments
   };
   return request;
 }
@@ -66,7 +83,8 @@ export function createProposalRequest(
 export function createProposal(
   sender: DID,
   receiver: DID,
-  proposals?: Proposal[]
+  proposals?: Proposal[],
+  opts?: ProposalCreationOptions
 ): ProposalMessage {
   const uuidv4 = uuid.v4();
   const request: ProposalMessage = {
@@ -78,7 +96,9 @@ export function createProposal(
     type: PROTOCOL_MESSAGE_TYPE.PROPOSAL_MESSAGE_TYPE,
     body: {
       proposals: proposals || []
-    }
+    },
+    created_time: getUnixTimestamp(new Date()),
+    expires_time: opts?.expires_time ? getUnixTimestamp(opts.expires_time) : undefined
   };
   return request;
 }
@@ -128,18 +148,22 @@ export interface ICredentialProposalHandler {
 }
 
 /** @beta ProposalRequestHandlerOptions represents proposal-request handler options */
-export type ProposalRequestHandlerOptions = object;
+export type ProposalRequestHandlerOptions = BasicHandlerOptions;
 
 /** @beta ProposalHandlerOptions represents proposal handler options */
-export type ProposalHandlerOptions = {
+export type ProposalHandlerOptions = BasicHandlerOptions & {
   proposalRequest?: ProposalRequestMessage;
 };
 
 /** @beta CredentialProposalHandlerParams represents credential proposal handler params */
 export type CredentialProposalHandlerParams = {
   agentUrl: string;
-  proposalResolverFn: (context: string, type: string) => Promise<Proposal>;
-  packerParams: PackerParams;
+  proposalResolverFn: (
+    context: string,
+    type: string,
+    opts?: { msg?: BasicMessage }
+  ) => Promise<Proposal>;
+  packerParams: HandlerPackerParams;
 };
 
 /**
@@ -266,7 +290,9 @@ export class CredentialProposalHandler
       }
 
       // credential not found in the wallet, prepare proposal protocol message
-      const proposal = await this._params.proposalResolverFn(cred.context, cred.type);
+      const proposal = await this._params.proposalResolverFn(cred.context, cred.type, {
+        msg: proposalRequest
+      });
       if (!proposal) {
         throw new Error(`can't resolve Proposal for type: ${cred.type}, context: ${cred.context}`);
       }
@@ -298,39 +324,36 @@ export class CredentialProposalHandler
     //eslint-disable-next-line @typescript-eslint/no-unused-vars
     opts?: ProposalRequestHandlerOptions
   ): Promise<Uint8Array> {
-    if (
-      this._params.packerParams.mediaType === MediaType.SignedMessage &&
-      !this._params.packerParams.packerOptions
-    ) {
-      throw new Error(`jws packer options are required for ${MediaType.SignedMessage}`);
-    }
-
     const proposalRequest = await this.parseProposalRequest(request);
     if (!proposalRequest.from) {
       throw new Error(`failed request. empty 'from' field`);
+    }
+    if (!opts?.allowExpiredMessages) {
+      verifyExpiresTime(proposalRequest);
     }
 
     const senderDID = DID.parse(proposalRequest.from);
     const message = await this.handleProposalRequestMessage(proposalRequest);
     const response = byteEncoder.encode(JSON.stringify(message));
 
-    const packerOpts =
-      this._params.packerParams.mediaType === MediaType.SignedMessage
-        ? this._params.packerParams.packerOptions
-        : {
-            provingMethodAlg: proving.provingMethodGroth16AuthV2Instance.methodAlg
-          };
-
-    return this._packerMgr.pack(this._params.packerParams.mediaType, response, {
-      senderDID,
-      ...packerOpts
-    });
+    const packerOpts = initDefaultPackerOptions(
+      this._params.packerParams.mediaType,
+      this._params.packerParams.packerOptions,
+      {
+        provingMethodAlg: await getProvingMethodAlgFromJWZ(request),
+        senderDID
+      }
+    );
+    return this._packerMgr.pack(this._params.packerParams.mediaType, response, packerOpts);
   }
 
   /**
    * @inheritdoc ICredentialProposalHandler#handleProposal
    */
   async handleProposal(proposal: ProposalMessage, opts?: ProposalHandlerOptions) {
+    if (!opts?.allowExpiredMessages) {
+      verifyExpiresTime(proposal);
+    }
     if (opts?.proposalRequest && opts.proposalRequest.from !== proposal.to) {
       throw new Error(
         `sender of the request is not a target of response - expected ${opts.proposalRequest.from}, given ${proposal.to}`

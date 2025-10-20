@@ -9,9 +9,8 @@ import {
   ZKPPackerParams
 } from '../types';
 import { Token, Header, ProvingMethodAlg, proving } from '@iden3/js-jwz';
-import { AuthV2PubSignals, CircuitId } from '../../circuits/index';
-import { BytesHelper, DID } from '@uptickproject/js-iden3-core';
-import { bytesToProtocolMessage } from '../utils/envelope';
+import { AuthV2PubSignals, AuthV3PubSignals, CircuitId } from '../../circuits/index';
+import { BytesHelper, DID } from '@iden3/js-iden3-core';
 import {
   ErrNoProvingMethodAlg,
   ErrPackedWithUnsupportedCircuit,
@@ -20,9 +19,10 @@ import {
   ErrStateVerificationFailed,
   ErrUnknownCircuitID
 } from '../errors';
-import { MediaType } from '../constants';
+import { AcceptJwzAlgorithms, MediaType, ProtocolVersion } from '../constants';
 import { byteDecoder, byteEncoder } from '../../utils';
 import { DEFAULT_AUTH_VERIFY_DELAY } from '../constants';
+import { parseAcceptProfile } from '../utils';
 
 const { getProvingMethod } = proving;
 
@@ -85,6 +85,9 @@ export class VerificationHandlerFunc {
  * @implements implements IPacker interface
  */
 export class ZKPPacker implements IPacker {
+  private readonly supportedProtocolVersions = [ProtocolVersion.V1];
+  private readonly supportedAlgorithms = [AcceptJwzAlgorithms.Groth16];
+  private readonly supportedCircuitIds: string[];
   /**
    * Creates an instance of ZKPPacker.
    * @param {Map<string, ProvingParams>} provingParamsMap - string is derived by JSON.parse(ProvingMethodAlg)
@@ -96,7 +99,16 @@ export class ZKPPacker implements IPacker {
     private readonly _opts: StateVerificationOpts = {
       acceptedStateTransitionDelay: DEFAULT_AUTH_VERIFY_DELAY
     }
-  ) {}
+  ) {
+    const supportedProvers = Array.from(this.provingParamsMap.keys()).map(
+      (alg) => alg.split(':')[1]
+    );
+
+    const supportedVerifiers = Array.from(this.verificationParamsMap.keys()).map(
+      (alg) => alg.split(':')[1]
+    );
+    this.supportedCircuitIds = [...new Set([...supportedProvers, ...supportedVerifiers])];
+  }
 
   /**
    * Packs a basic message using the specified parameters.
@@ -163,7 +175,7 @@ export class ZKPPacker implements IPacker {
       throw new Error(ErrStateVerificationFailed);
     }
 
-    const message = bytesToProtocolMessage(byteEncoder.encode(token.getPayload()));
+    const message = JSON.parse(token.getPayload());
 
     // should throw if error
     verifySender(token, message);
@@ -174,18 +186,52 @@ export class ZKPPacker implements IPacker {
   mediaType(): MediaType {
     return MediaType.ZKPMessage;
   }
+
+  /** {@inheritDoc IPacker.getSupportedProfiles} */
+  getSupportedProfiles(): string[] {
+    return this.supportedProtocolVersions.map(
+      (v) =>
+        `${v};env=${this.mediaType()};alg=${this.supportedAlgorithms.join(
+          ','
+        )};circuitIds=${this.supportedCircuitIds.join(',')}`
+    );
+  }
+
+  /** {@inheritDoc IPacker.isProfileSupported} */
+  isProfileSupported(profile: string) {
+    const { protocolVersion, env, circuits, alg } = parseAcceptProfile(profile);
+
+    if (!this.supportedProtocolVersions.includes(protocolVersion)) {
+      return false;
+    }
+
+    if (env !== this.mediaType()) {
+      return false;
+    }
+
+    const supportedCircuitIds = this.supportedCircuitIds;
+    const circuitIdSupported =
+      !circuits?.length || circuits.some((c) => supportedCircuitIds.includes(c));
+
+    const supportedAlgArr = this.supportedAlgorithms;
+    const algSupported =
+      !alg?.length || alg.some((a) => supportedAlgArr.includes(a as AcceptJwzAlgorithms));
+    return algSupported && circuitIdSupported;
+  }
 }
 
 const verifySender = async (token: Token, msg: BasicMessage): Promise<void> => {
   switch (token.circuitId) {
     case CircuitId.AuthV2:
+    case CircuitId.AuthV3_8_32:
+    case CircuitId.AuthV3:
       {
         if (!msg.from) {
           throw new Error(ErrSenderNotUsedTokenCreation);
         }
-        const authSignals = new AuthV2PubSignals().pubSignalsUnmarshal(
-          byteEncoder.encode(JSON.stringify(token.zkProof.pub_signals))
-        );
+        const authSignals = (
+          token.circuitId === CircuitId.AuthV2 ? new AuthV2PubSignals() : new AuthV3PubSignals()
+        ).pubSignalsUnmarshal(byteEncoder.encode(JSON.stringify(token.zkProof.pub_signals)));
         const did = DID.parseFromId(authSignals.userID);
 
         const msgHash = await token.getMessageHash();

@@ -1,10 +1,16 @@
 import {
   DataPrepareHandlerFunc,
   PackageManager,
+  PlainPacker,
   VerificationHandlerFunc,
   ZKPPacker
 } from '../../src/iden3comm/index';
-import { mockPrepareAuthInputs, mockVerifyState, ProvingMethodGroth16Authv2 } from './mock/proving';
+import {
+  initZKPPacker,
+  mockPrepareAuthInputs,
+  mockVerifyState,
+  ProvingMethodGroth16Authv2
+} from './mock/proving';
 import { proving, ProvingMethodAlg, ProvingMethod } from '@iden3/js-jwz';
 import { DID } from '@uptickproject/js-iden3-core';
 import {
@@ -16,7 +22,7 @@ import { MediaType, PROTOCOL_MESSAGE_TYPE } from '../../src/iden3comm/constants'
 import { byteDecoder, byteEncoder } from '../../src';
 
 const { registerProvingMethod } = proving;
-import { expect } from 'chai';
+import { describe, expect, it } from 'vitest';
 describe('tests packageManager with ZKP Packer', () => {
   it('tests package manager with zkp  packer', async () => {
     const pm = new PackageManager();
@@ -69,6 +75,17 @@ describe('tests packageManager with ZKP Packer', () => {
     expect(unpackedMediaType).to.deep.equal(MediaType.ZKPMessage);
     expect(senderDID.string()).to.deep.equal(unpackedMessage.from);
     expect(byteDecoder.decode(msgBytes)).to.deep.equal(JSON.stringify(unpackedMessage));
+  });
+
+  it('test getSupportedProfiles', async () => {
+    const pm = new PackageManager();
+    pm.registerPackers([await initZKPPacker({ alg: 'groth16' }), new PlainPacker()]);
+    const supportedProfiles = pm.getSupportedProfiles();
+    expect(supportedProfiles.length).to.be.eq(2);
+    expect(supportedProfiles).to.include(
+      `iden3comm/v1;env=${MediaType.ZKPMessage};alg=groth16;circuitIds=authV2`
+    );
+    expect(supportedProfiles).to.include(`iden3comm/v1;env=${MediaType.PlainMessage}`);
   });
 });
 

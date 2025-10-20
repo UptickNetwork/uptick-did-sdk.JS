@@ -1,6 +1,7 @@
 import { BasicMessage, IPacker } from '../types';
-import { MediaType } from '../constants';
+import { MediaType, ProtocolVersion } from '../constants';
 import { byteDecoder, byteEncoder } from '../../utils';
+import { parseAcceptProfile } from '../utils';
 
 /**
  * Plain packer just serializes bytes to JSON and adds media type
@@ -10,6 +11,8 @@ import { byteDecoder, byteEncoder } from '../../utils';
  * @implements implements IPacker interface
  */
 export class PlainPacker implements IPacker {
+  private readonly supportedProtocolVersions = [ProtocolVersion.V1];
+
   /**
    * Packs a basic message using the specified parameters.
    *
@@ -52,5 +55,32 @@ export class PlainPacker implements IPacker {
    */
   mediaType(): MediaType {
     return MediaType.PlainMessage;
+  }
+
+  /** {@inheritDoc IPacker.getSupportedProfiles} */
+  getSupportedProfiles(): string[] {
+    return this.supportedProtocolVersions.map((v) => `${v};env=${this.mediaType()}`);
+  }
+
+  /** {@inheritDoc IPacker.isProfileSupported} */
+  isProfileSupported(profile: string) {
+    const { protocolVersion, env, circuits, alg } = parseAcceptProfile(profile);
+
+    if (!this.supportedProtocolVersions.includes(protocolVersion)) {
+      return false;
+    }
+    if (env !== this.mediaType()) {
+      return false;
+    }
+
+    if (circuits) {
+      throw new Error(`Circuits are not supported for ${env} media type`);
+    }
+
+    if (alg) {
+      throw new Error(`Algorithms are not supported for ${env} media type`);
+    }
+
+    return true;
   }
 }

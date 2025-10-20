@@ -1,8 +1,6 @@
 import { BasicMessage, IPackageManager, IPacker, PackerParams } from './types';
-import { bytesToHeaderStub } from './utils/envelope';
-import { base64 } from 'rfc4648';
 import { MediaType } from './constants';
-import { byteDecoder, byteEncoder } from '../utils';
+import { base64ToBytes, byteDecoder, byteEncoder } from '../utils';
 
 /**
  * Basic package manager for iden3 communication protocol
@@ -19,6 +17,34 @@ export class PackageManager implements IPackageManager {
    */
   constructor() {
     this.packers = new Map<MediaType, IPacker>();
+  }
+
+  /** {@inheritDoc IPackageManager.getSupportedProfiles} */
+  getSupportedProfiles(): string[] {
+    const acceptProfiles: string[] = [];
+    const mediaTypes = this.getSupportedMediaTypes();
+    for (const mediaType of mediaTypes) {
+      const p = this.packers.get(mediaType);
+      if (p) {
+        acceptProfiles.push(...p.getSupportedProfiles());
+      }
+    }
+    return [...new Set(acceptProfiles)];
+  }
+
+  /** {@inheritDoc IPackageManager.isProfileSupported} */
+  isProfileSupported(mediaType: MediaType, profile: string): boolean {
+    const p = this.packers.get(mediaType);
+    if (!p) {
+      return false;
+    }
+
+    return p.isProfileSupported(profile);
+  }
+
+  /** {@inheritDoc IPackageManager.getSupportedMediaTypes} */
+  getSupportedMediaTypes(): MediaType[] {
+    return [...this.packers.keys()];
   }
 
   /** {@inheritDoc IPackageManager.registerPackers} */
@@ -98,18 +124,35 @@ export class PackageManager implements IPackageManager {
 
   /** {@inheritDoc IPackageManager.getMediaType} */
   getMediaType(envelope: string): MediaType {
-    let base64HeaderBytes: Uint8Array;
-
-    // full serialized
+    const error = new Error(`missing header 'typ' in the envelope`);
+    const supportedMediaTypes = Object.values(MediaType);
     if (envelope[0] === '{') {
       const envelopeStub = JSON.parse(envelope);
-      return envelopeStub.typ as MediaType;
-    } else {
-      const header = envelope.split('.')[0];
-      base64HeaderBytes = base64.parse(header, { loose: true });
-    }
 
-    const header = bytesToHeaderStub(base64HeaderBytes);
-    return header.typ;
+      const typ = envelopeStub.typ;
+      if (typ && supportedMediaTypes.includes(typ)) {
+        return typ as MediaType;
+      }
+
+      if (envelopeStub.protected) {
+        const typ =
+          typeof envelopeStub.protected === 'string'
+            ? JSON.parse(byteDecoder.decode(base64ToBytes(envelopeStub.protected, { loose: true })))
+                ?.typ
+            : envelopeStub.protected.typ;
+        if (typ && supportedMediaTypes.includes(typ)) {
+          return typ as MediaType;
+        }
+      }
+
+      throw error;
+    }
+    const headerBase64 = envelope.split('.')[0];
+    const header = JSON.parse(byteDecoder.decode(base64ToBytes(headerBase64, { loose: true })));
+    const typ = header.typ as MediaType;
+    if (!typ || !supportedMediaTypes.includes(typ)) {
+      throw error;
+    }
+    return typ;
   }
 }

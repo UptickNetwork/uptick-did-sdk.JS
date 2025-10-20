@@ -34,7 +34,7 @@ import {
   RHS_URL
 } from '../helpers';
 
-import { expect } from 'chai';
+import { describe, expect, it, beforeEach } from 'vitest';
 import path from 'path';
 import { MediaType, PROTOCOL_MESSAGE_TYPE } from '../../src/iden3comm/constants';
 import { DID } from '@uptickproject/js-iden3-core';
@@ -88,7 +88,7 @@ describe('proposal-request handler', () => {
     const proofService = new ProofService(idWallet, credWallet, circuitStorage, MOCK_STATE_STORAGE);
     packageMgr = await getPackageMgr(
       await circuitStorage.loadCircuitData(CircuitId.AuthV2),
-      proofService.generateAuthV2Inputs.bind(proofService),
+      proofService.generateAuthInputs.bind(proofService),
       proofService.verifyState.bind(proofService)
     );
     proposalRequestHandler = new CredentialProposalHandler(packageMgr, idWallet, {
@@ -225,7 +225,8 @@ describe('proposal-request handler', () => {
       {
         type: 'WebVerificationForm',
         url: 'http://issuer-agent.com/verify?anyUniqueIdentifierOfSession=55',
-        description: 'you can pass the verification on our KYC provider by following the next link'
+        description: 'you can pass the verification on our KYC provider by following the next link',
+        credentials: []
       }
     ]);
 

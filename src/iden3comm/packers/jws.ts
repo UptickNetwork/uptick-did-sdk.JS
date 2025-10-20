@@ -1,5 +1,10 @@
 import { BasicMessage, IPacker, JWSPackerParams } from '../types';
-import { MediaType, SUPPORTED_PUBLIC_KEY_TYPES } from '../constants';
+import {
+  AcceptJwsAlgorithms,
+  MediaType,
+  ProtocolVersion,
+  SUPPORTED_PUBLIC_KEY_TYPES
+} from '../constants';
 import { extractPublicKeyBytes, resolveVerificationMethods } from '../utils/did';
 import { keyPath, KMS } from '../../kms/';
 
@@ -13,6 +18,7 @@ import {
   decodeBase64url,
   encodeBase64url
 } from '../../utils';
+import { parseAcceptProfile } from '../utils';
 
 /**
  * Packer that can pack message to JWZ token,
@@ -22,6 +28,9 @@ import {
  * @implements implements IPacker interface
  */
 export class JWSPacker implements IPacker {
+  private readonly supportedAlgorithms = [AcceptJwsAlgorithms.ES256K, AcceptJwsAlgorithms.ES256KR];
+  private readonly supportedProtocolVersions = [ProtocolVersion.V1];
+
   /**
    * Creates an instance of JWSPacker.
    *
@@ -100,6 +109,33 @@ export class JWSPacker implements IPacker {
 
   mediaType(): MediaType {
     return MediaType.SignedMessage;
+  }
+
+  /** {@inheritDoc IPacker.getSupportedProfiles} */
+  getSupportedProfiles(): string[] {
+    return this.supportedProtocolVersions.map(
+      (v) => `${v};env=${this.mediaType()};alg=${this.supportedAlgorithms.join(',')}`
+    );
+  }
+
+  /** {@inheritDoc IPacker.isProfileSupported} */
+  isProfileSupported(profile: string) {
+    const { protocolVersion, env, circuits, alg } = parseAcceptProfile(profile);
+
+    if (!this.supportedProtocolVersions.includes(protocolVersion)) {
+      return false;
+    }
+    if (env !== this.mediaType()) {
+      return false;
+    }
+
+    if (circuits) {
+      throw new Error(`Circuits are not supported for ${env} media type`);
+    }
+
+    const algSupported =
+      !alg?.length || alg.some((a) => this.supportedAlgorithms.includes(a as AcceptJwsAlgorithms));
+    return algSupported;
   }
 
   private async resolveDidDoc(from: string) {

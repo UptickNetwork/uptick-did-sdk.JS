@@ -1,8 +1,8 @@
 import { PackageManager, RefreshHandler } from '../../src';
 import { credWithRefreshService } from '../credentials/mock';
 import { initZKPPacker } from '../iden3comm/mock/proving';
-import fetchMock from '@gr2m/fetch-mock';
-import { expect } from 'chai';
+import nock from 'nock';
+import { describe, expect, it } from 'vitest';
 
 describe('refresh-service', () => {
   it('refresh service returns cred', async () => {
@@ -19,20 +19,19 @@ describe('refresh-service', () => {
     refreshedCred.expirationDate = new Date().setMinutes(new Date().getMinutes() + 1);
     const refreshedId = 'test1_refreshed';
     refreshedCred.id = refreshedId;
-    fetchMock.spy();
-    fetchMock.post('http://test-refresh/100', {
-      body: {
+
+    nock('http://test-refresh.com')
+      .post('/refresh')
+      .reply(200, {
         // CredentialIssuanceMessage
         id: 'uuid',
         body: {
           credential: refreshedCred
         }
-      }
-    });
+      });
 
     const newCred = await refreshService.refreshCredential(credToRefresh, { reason: 'expired' });
-    fetchMock.restore();
-
+    nock.cleanAll();
     expect(newCred.id).to.be.equal(refreshedId);
   });
 });

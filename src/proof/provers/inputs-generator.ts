@@ -21,7 +21,6 @@ import {
   Query,
   QueryOperators,
   TreeState,
-  ValueProof,
   getOperatorNameByValue
 } from '../../circuits';
 import {
@@ -40,8 +39,8 @@ import {
 import { isEthereumIdentity } from '../../utils';
 
 export type DIDProfileMetadata = {
-  authProfileNonce: number;
-  credentialSubjectProfileNonce: number;
+  authProfileNonce: number | string;
+  credentialSubjectProfileNonce: number | string;
 };
 
 export type ProofGenerationOptions = {
@@ -51,6 +50,10 @@ export type ProofGenerationOptions = {
   credentialRevocationStatus?: RevocationStatus;
   verifierDid?: DID;
   linkNonce?: bigint;
+};
+
+export type AuthProofGenerationOptions = {
+  challenge?: bigint;
 };
 
 export type ProofInputsParams = ProofGenerationOptions & DIDProfileMetadata;
@@ -71,6 +74,15 @@ const v2Operations = [
   Operators.GT,
   Operators.IN,
   Operators.NIN,
+  Operators.NE,
+  Operators.SD
+];
+const v2OnChainOperations = [
+  Operators.EQ,
+  Operators.LT,
+  Operators.GT,
+  Operators.IN,
+  Operators.NIN,
   Operators.NE
 ];
 
@@ -78,12 +90,20 @@ export const circuitValidator: {
   [k in CircuitId]: { maxQueriesCount: number; supportedOperations: Operators[] };
 } = {
   [CircuitId.AtomicQueryMTPV2]: { maxQueriesCount: 1, supportedOperations: v2Operations },
-  [CircuitId.AtomicQueryMTPV2OnChain]: { maxQueriesCount: 1, supportedOperations: v2Operations },
+  [CircuitId.AtomicQueryMTPV2OnChain]: {
+    maxQueriesCount: 1,
+    supportedOperations: v2OnChainOperations
+  },
   [CircuitId.AtomicQuerySigV2]: { maxQueriesCount: 1, supportedOperations: v2Operations },
-  [CircuitId.AtomicQuerySigV2OnChain]: { maxQueriesCount: 1, supportedOperations: v2Operations },
+  [CircuitId.AtomicQuerySigV2OnChain]: {
+    maxQueriesCount: 1,
+    supportedOperations: v2OnChainOperations
+  },
   [CircuitId.AtomicQueryV3]: { maxQueriesCount: 1, supportedOperations: allOperations },
   [CircuitId.AtomicQueryV3OnChain]: { maxQueriesCount: 1, supportedOperations: allOperations },
   [CircuitId.AuthV2]: { maxQueriesCount: 0, supportedOperations: [] },
+  [CircuitId.AuthV3]: { maxQueriesCount: 0, supportedOperations: [] },
+  [CircuitId.AuthV3_8_32]: { maxQueriesCount: 0, supportedOperations: [] },
   [CircuitId.StateTransition]: { maxQueriesCount: 0, supportedOperations: [] },
   [CircuitId.LinkedMultiQuery10]: { maxQueriesCount: 10, supportedOperations: allOperations }
 };
@@ -296,7 +316,6 @@ export class InputGenerator {
     circuitInputs.challenge = params.challenge;
 
     const query = circuitQueries[0];
-    query.operator = this.transformV2QueryOperator(query.operator);
     circuitInputs.query = query;
     circuitInputs.claim = {
       issuerID: circuitClaimData.issuerId,
@@ -381,7 +400,6 @@ export class InputGenerator {
     circuitInputs.skipClaimRevocationCheck = params.skipRevocation;
 
     const query = circuitQueries[0];
-    query.operator = this.transformV2QueryOperator(query.operator);
     circuitInputs.query = query;
     circuitInputs.currentTimeStamp = getUnixTimestamp(new Date());
 
@@ -463,8 +481,8 @@ export class InputGenerator {
     circuitInputs.skipClaimRevocationCheck = params.skipRevocation;
 
     const query = circuitQueries[0];
+    // it is ok not to reset claimPathKey for noop, as it is a part of output, but auth won't be broken. (it skips check for noop)
     query.values = [Operators.SD, Operators.NOOP].includes(query.operator) ? [] : query.values;
-    query.valueProof = query.operator === Operators.NOOP ? new ValueProof() : query.valueProof;
 
     circuitInputs.query = query;
     circuitInputs.currentTimeStamp = getUnixTimestamp(new Date());
@@ -488,6 +506,8 @@ export class InputGenerator {
     params,
     circuitQueries
   }: InputContext): Promise<Uint8Array> => {
+    const id = DID.idFromDID(identifier);
+
     const circuitClaimData = await this.newCircuitClaimData(preparedCredential);
 
     circuitClaimData.nonRevProof = toClaimNonRevStatus(preparedCredential.revStatus);
@@ -525,8 +545,8 @@ export class InputGenerator {
     circuitInputs.skipClaimRevocationCheck = params.skipRevocation;
 
     const query = circuitQueries[0];
+    // no need to set valueProof empty for noop, because it is ignored in circuit, but implies correct calculation of query hash
     query.values = [Operators.SD, Operators.NOOP].includes(query.operator) ? [] : query.values;
-    query.valueProof = query.operator === Operators.NOOP ? new ValueProof() : query.valueProof;
 
     circuitInputs.query = query;
     circuitInputs.currentTimeStamp = getUnixTimestamp(new Date());
@@ -542,15 +562,12 @@ export class InputGenerator {
     circuitInputs.isBJJAuthEnabled = isEthIdentity ? 0 : 1;
 
     circuitInputs.challenge = BigInt(params.challenge ?? 0);
-    const { nonce: authProfileNonce, genesisDID } =
-      await this._identityWallet.getGenesisDIDMetadata(identifier);
-    const id = DID.idFromDID(genesisDID);
     const stateProof = await this._stateStorage.getGISTProof(id.bigInt());
     const gistProof = toGISTProof(stateProof);
     circuitInputs.gistProof = gistProof;
     // auth inputs
     if (circuitInputs.isBJJAuthEnabled === 1) {
-      const authPrepared = await this.prepareAuthBJJCredential(genesisDID);
+      const authPrepared = await this.prepareAuthBJJCredential(identifier);
 
       const authClaimData = await this.newCircuitClaimData({
         credential: authPrepared.credential,
@@ -562,7 +579,6 @@ export class InputGenerator {
         authPrepared.credential
       );
 
-      circuitInputs.profileNonce = BigInt(authProfileNonce);
       circuitInputs.authClaim = authClaimData.claim;
       circuitInputs.authClaimIncMtp = authClaimData.proof;
       circuitInputs.authClaimNonRevMtp = authPrepared.nonRevProof.proof;
@@ -593,7 +609,9 @@ export class InputGenerator {
     circuitQueries.forEach((query) => {
       this.checkOperatorSupport(proofReq.circuitId, query.operator);
     });
-
+    circuitQueries.forEach((query) => {
+      query.values = [Operators.SD, Operators.NOOP].includes(query.operator) ? [] : query.values;
+    });
     return circuitInputs.inputsMarshal();
   };
 

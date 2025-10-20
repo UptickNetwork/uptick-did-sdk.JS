@@ -7,8 +7,8 @@ import {
 } from './constants';
 import { TreeState } from '../circuits';
 import { Hex, Signature } from '@iden3/js-crypto';
-import { Claim, DID } from '@uptickproject/js-iden3-core';
-import { JSONObject } from '../iden3comm';
+import { Claim, DID } from '@iden3/js-iden3-core';
+import { JsonDocumentObject, JSONObject } from '../iden3comm';
 
 /**
  * Represents the published state of the issuer
@@ -95,11 +95,11 @@ export class Iden3SparseMerkleTreeProof {
         Hash.fromString(JSON.stringify(h))
       );
       const allSiblings = Proof.buildAllSiblings(obj?.mtp?.depth, notEmpties, siblingsHashes);
-      let nodeAux = undefined;
-      if (obj.mtp.nodeAux) {
+      let nodeAux = obj.mtp.nodeAux || obj.mtp.node_aux;
+      if (nodeAux) {
         nodeAux = {
-          key: Hash.fromString(JSON.stringify(obj.mtp.nodeAux.key)),
-          value: Hash.fromString(JSON.stringify(obj.mtp.nodeAux.value))
+          key: Hash.fromString(JSON.stringify(nodeAux.key)),
+          value: Hash.fromString(JSON.stringify(nodeAux.value))
         };
       }
       mtp = new Proof({ existence: obj?.mtp.existence, nodeAux: nodeAux, siblings: allSiblings });
@@ -220,7 +220,7 @@ export class BJJSignatureProof2021 {
  */
 export interface ProofQuery {
   allowedIssuers?: string[];
-  credentialSubject?: { [key: string]: unknown };
+  credentialSubject?: JsonDocumentObject;
   schema?: string; // string url
   claimId?: string;
   credentialSubjectId?: string;
