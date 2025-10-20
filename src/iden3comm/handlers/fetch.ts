@@ -8,7 +8,6 @@ import {
   CredentialsOfferMessage,
   CredentialsOnchainOfferMessage,
   IPackageManager,
-  JWSPackerParams,
   MessageFetchRequestMessage
 } from '../types';
 
@@ -16,15 +15,15 @@ import { W3CCredential } from '../../verifiable';
 import { ICredentialWallet, getUserDIDFromCredential } from '../../credentials';
 
 import { byteDecoder, byteEncoder } from '../../utils';
-import { proving } from '@iden3/js-jwz';
 import { DID } from '@iden3/js-iden3-core';
 import * as uuid from 'uuid';
 import {
   AbstractMessageHandler,
   BasicHandlerOptions,
-  IProtocolMessageHandler
+  IProtocolMessageHandler,
+  getProvingMethodAlgFromJWZ
 } from './message-handler';
-import { verifyExpiresTime } from './common';
+import { HandlerPackerParams, initDefaultPackerOptions, verifyExpiresTime } from './common';
 import { IOnchainIssuer } from '../../storage';
 
 /**
@@ -36,7 +35,7 @@ import { IOnchainIssuer } from '../../storage';
  */
 export type FetchHandlerOptions = BasicHandlerOptions & {
   mediaType: MediaType;
-  packerOptions?: JWSPackerParams;
+  packerOptions?: HandlerPackerParams;
   headers?: {
     [key: string]: string;
   };
@@ -197,7 +196,7 @@ export class FetchHandler
     ctx: {
       mediaType?: MediaType;
       headers?: HeadersInit;
-      packerOptions?: JWSPackerParams;
+      packerOptions?: HandlerPackerParams;
     }
   ): Promise<W3CCredential[] | BasicMessage> {
     if (!ctx.mediaType) {
@@ -222,19 +221,12 @@ export class FetchHandler
 
       const msgBytes = byteEncoder.encode(JSON.stringify(fetchRequest));
 
-      const packerOpts =
-        ctx.mediaType === MediaType.SignedMessage
-          ? ctx.packerOptions
-          : {
-              provingMethodAlg: proving.provingMethodGroth16AuthV2Instance.methodAlg
-            };
-
       const senderDID = DID.parse(offerMessage.to);
+      const packerOpts = initDefaultPackerOptions(ctx.mediaType, ctx.packerOptions, {
+        senderDID
+      });
       const token = byteDecoder.decode(
-        await this._packerMgr.pack(ctx.mediaType, msgBytes, {
-          senderDID,
-          ...packerOpts
-        })
+        await this._packerMgr.pack(ctx.mediaType, msgBytes, packerOpts)
       );
       try {
         if (!offerMessage?.body?.url) {
@@ -285,10 +277,6 @@ export class FetchHandler
     offer: Uint8Array,
     opts?: FetchHandlerOptions
   ): Promise<W3CCredential[]> {
-    if (opts?.mediaType === MediaType.SignedMessage && !opts.packerOptions) {
-      throw new Error(`jws packer options are required for ${MediaType.SignedMessage}`);
-    }
-
     const offerMessage = await FetchHandler.unpackMessage<CredentialsOfferMessage>(
       this._packerMgr,
       offer,
@@ -297,10 +285,16 @@ export class FetchHandler
     if (!opts?.allowExpiredMessages) {
       verifyExpiresTime(offerMessage);
     }
+
+    const mediaType = opts?.mediaType || MediaType.ZKPMessage;
+    const packerOptions = initDefaultPackerOptions(mediaType, opts?.packerOptions, {
+      provingMethodAlg: opts?.messageProvingMethodAlg || (await getProvingMethodAlgFromJWZ(offer)),
+      senderDID: DID.parse(offerMessage.to)
+    });
     const result = await this.handleOfferMessage(offerMessage, {
-      mediaType: opts?.mediaType,
+      mediaType,
       headers: opts?.headers,
-      packerOptions: opts?.packerOptions
+      packerOptions: packerOptions
     });
 
     if (Array.isArray(result)) {
@@ -402,7 +396,10 @@ export class FetchHandler
       throw new Error('credential is missing in issuance response message');
     }
 
-    await this.opts.credentialWallet.save(W3CCredential.fromJSON(issuanceMsg.body.credential));
+    if (!(issuanceMsg.body.credential instanceof W3CCredential)) {
+      throw new Error('credential object is not properly unmarshaled');
+    }
+    await this.opts.credentialWallet.save(issuanceMsg.body.credential);
 
     return null;
   }
@@ -422,6 +419,9 @@ export class FetchHandler
     if (!opts?.allowExpiredMessages) {
       verifyExpiresTime(issuanceMsg);
     }
+    // unpack returns body.credential as JSON object, we need to assign type to it.
+    // TODO: add unmarshaler for messages
+    issuanceMsg.body.credential = W3CCredential.fromJSON(issuanceMsg.body.credential);
     await this.handleIssuanceResponseMsg(issuanceMsg);
     return Uint8Array.from([]);
   }

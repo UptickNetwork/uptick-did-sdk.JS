@@ -5,7 +5,12 @@ import {
   VerificationHandlerFunc,
   ZKPPacker
 } from '../../src/iden3comm/index';
-import { mockPrepareAuthInputs, mockVerifyState, ProvingMethodGroth16Authv2 } from './mock/proving';
+import {
+  initZKPPacker,
+  mockPrepareAuthInputs,
+  mockVerifyState,
+  ProvingMethodGroth16Authv2
+} from './mock/proving';
 import { proving, ProvingMethodAlg, ProvingMethod } from '@iden3/js-jwz';
 import { DID } from '@iden3/js-iden3-core';
 import {
@@ -17,7 +22,7 @@ import { MediaType, PROTOCOL_MESSAGE_TYPE } from '../../src/iden3comm/constants'
 import { byteDecoder, byteEncoder } from '../../src';
 
 const { registerProvingMethod } = proving;
-import { expect } from 'chai';
+import { describe, expect, it } from 'vitest';
 describe('tests packageManager with ZKP Packer', () => {
   it('tests package manager with zkp  packer', async () => {
     const pm = new PackageManager();
@@ -72,9 +77,9 @@ describe('tests packageManager with ZKP Packer', () => {
     expect(byteDecoder.decode(msgBytes)).to.deep.equal(JSON.stringify(unpackedMessage));
   });
 
-  it('test getSupportedProfiles', () => {
+  it('test getSupportedProfiles', async () => {
     const pm = new PackageManager();
-    pm.registerPackers([new ZKPPacker(new Map(), new Map()), new PlainPacker()]);
+    pm.registerPackers([await initZKPPacker({ alg: 'groth16' }), new PlainPacker()]);
     const supportedProfiles = pm.getSupportedProfiles();
     expect(supportedProfiles.length).to.be.eq(2);
     expect(supportedProfiles).to.include(

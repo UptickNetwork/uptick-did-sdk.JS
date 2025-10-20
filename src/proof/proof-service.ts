@@ -7,6 +7,8 @@ import {
 import {
   AuthV2Inputs,
   AuthV2PubSignals,
+  AuthV3Inputs,
+  AuthV3PubSignals,
   CircuitId,
   Operators,
   Query,
@@ -19,6 +21,7 @@ import {
   createVerifiablePresentation,
   ProofQuery,
   RevocationStatus,
+  VerifiableConstants,
   W3CCredential
 } from '../verifiable';
 import {
@@ -41,12 +44,14 @@ import {
   ZeroKnowledgeProofResponse,
   PROTOCOL_CONSTANTS,
   VerifiablePresentation,
-  JsonDocumentObject
+  JsonDocumentObject,
+  ZeroKnowledgeProofAuthResponse
 } from '../iden3comm';
 import { cacheLoader } from '../schema-processor';
 import { ICircuitStorage, IStateStorage } from '../storage';
 import { byteDecoder, byteEncoder } from '../utils/encoding';
 import {
+  AuthProofGenerationOptions,
   InputGenerator,
   ProofGenerationOptions,
   ProofInputsParams
@@ -122,6 +127,7 @@ export interface IProofService {
   ): Promise<ZeroKnowledgeProofResponse>;
 
   /**
+   * @deprecated, use generateAuthInputs with CircuitId.AuthV2 instead
    * generates auth inputs
    *
    * @param {Uint8Array} hash - challenge that will be signed
@@ -132,13 +138,39 @@ export interface IProofService {
   generateAuthV2Inputs(hash: Uint8Array, did: DID, circuitId: CircuitId): Promise<Uint8Array>;
 
   /**
-   * generates auth inputs
+   * generates Auth inputs
+   *
+   * @param {Uint8Array} hash - challenge that will be signed
+   * @param {DID} did - identity that will generate a proof
+   * @param {CircuitId} circuitId - circuit id for authentication
+   * @returns `Promise<Uint8Array>`
+   */
+  generateAuthInputs(hash: Uint8Array, did: DID, circuitId: CircuitId): Promise<Uint8Array>;
+
+  /**
+   * @deprecated, use generateAuthProof with CircuitId.AuthV2 instead
+   * generates auth v2 proof from given identity
    *
    * @param {Uint8Array} hash - challenge that will be signed
    * @param {DID} did - identity that will generate a proof
    * @returns `Promise<ZKProof>`
    */
   generateAuthV2Proof(hash: Uint8Array, did: DID): Promise<ZKProof>;
+
+  /**
+   * Generate auth proof from given identity with generic params
+   *
+   * @param {CircuitId} circuitId - circuitId for the proof generation
+   * @param {DID} identifier - did that will generate proof
+   * @param {ProofGenerationOptions} opts - options that will be used for proof generation
+   *
+   * @returns `Promise<ZeroKnowledgeProofResponse>`
+   */
+  generateAuthProof(
+    circuitId: CircuitId,
+    identifier: DID,
+    opts?: AuthProofGenerationOptions
+  ): Promise<ZeroKnowledgeProofAuthResponse>;
 
   /**
    * state verification function
@@ -270,7 +302,10 @@ export class ProofService implements IProofService {
     }
 
     if (!credentialWithRevStatus.cred) {
-      throw new Error(`credential not found for query ${JSON.stringify(proofReq.query)}`);
+      throw new Error(
+        VerifiableConstants.ERRORS.PROOF_SERVICE_NO_CREDENTIAL_FOR_QUERY +
+          ` ${JSON.stringify(proofReq.query)}`
+      );
     }
 
     const credentialCoreClaim = await this._identityWallet.getCoreClaimFromCredential(
@@ -292,14 +327,14 @@ export class ProofService implements IProofService {
       await this._identityWallet.getGenesisDIDMetadata(subjectDID);
 
     if (subjectGenesisDID.string() !== genesisDID.string()) {
-      throw new Error('subject and auth profiles are not derived from the same did');
+      throw new Error(VerifiableConstants.ERRORS.PROOF_SERVICE_PROFILE_GENESIS_DID_MISMATCH);
     }
 
     const propertiesMetadata = parseCredentialSubject(
       proofReq.query.credentialSubject as JsonDocumentObject
     );
     if (!propertiesMetadata.length) {
-      throw new Error('no queries in zkp request');
+      throw new Error(VerifiableConstants.ERRORS.PROOF_SERVICE_NO_QUERIES_IN_ZKP_REQUEST);
     }
 
     const mtPosition = preparedCredential.credentialCoreClaim.getMerklizedPosition();
@@ -367,6 +402,38 @@ export class ProofService implements IProofService {
       vp,
       proof,
       pub_signals
+    };
+  }
+
+  /** {@inheritdoc IProofService.generateAuthProof} */
+  async generateAuthProof(
+    circuitId: CircuitId,
+    identifier: DID,
+    opts?: AuthProofGenerationOptions
+  ): Promise<ZeroKnowledgeProofAuthResponse> {
+    if (
+      circuitId !== CircuitId.AuthV2 &&
+      circuitId !== CircuitId.AuthV3 &&
+      circuitId !== CircuitId.AuthV3_8_32
+    ) {
+      throw new Error('CircuitId is not supported');
+    }
+    if (!opts) {
+      opts = {
+        challenge: 0n
+      };
+    }
+
+    const challenge = opts.challenge
+      ? BytesHelper.intToBytes(opts.challenge).reverse()
+      : new Uint8Array(32);
+    const authInputs = await this.generateAuthInputs(challenge, identifier, circuitId);
+
+    const zkProof = await this._prover.generate(authInputs, circuitId);
+    return {
+      circuitId: circuitId,
+      proof: zkProof.proof,
+      pub_signals: zkProof.pub_signals
     };
   }
 
@@ -497,9 +564,50 @@ export class ProofService implements IProofService {
     return authInputs.inputsMarshal();
   }
 
+  /** {@inheritdoc IProofService.generateAuthInputs} */
+  async generateAuthInputs(hash: Uint8Array, did: DID, circuitId: CircuitId): Promise<Uint8Array> {
+    if (
+      circuitId !== CircuitId.AuthV2 &&
+      circuitId !== CircuitId.AuthV3 &&
+      circuitId !== CircuitId.AuthV3_8_32
+    ) {
+      throw new Error('CircuitId is not supported');
+    }
+
+    const { nonce: authProfileNonce, genesisDID } =
+      await this._identityWallet.getGenesisDIDMetadata(did);
+
+    const challenge = BytesHelper.bytesToInt(hash.reverse());
+
+    const authPrepared = await this._inputsGenerator.prepareAuthBJJCredential(genesisDID);
+
+    const signature = await this._identityWallet.signChallenge(challenge, authPrepared.credential);
+    const id = DID.idFromDID(genesisDID);
+    const stateProof = await this._stateStorage.getGISTProof(id.bigInt());
+
+    const gistProof = toGISTProof(stateProof);
+
+    const authInputs = new AuthV3Inputs(); // works for both v3 and v2
+    if (circuitId === CircuitId.AuthV3_8_32) {
+      authInputs.mtLevel = 8;
+      authInputs.mtLevelOnChain = 32;
+    }
+
+    authInputs.genesisID = id;
+    authInputs.profileNonce = BigInt(authProfileNonce);
+    authInputs.authClaim = authPrepared.coreClaim;
+    authInputs.authClaimIncMtp = authPrepared.incProof.proof;
+    authInputs.authClaimNonRevMtp = authPrepared.nonRevProof.proof;
+    authInputs.treeState = authPrepared.incProof.treeState;
+    authInputs.signature = signature;
+    authInputs.challenge = challenge;
+    authInputs.gistProof = gistProof;
+    return authInputs.inputsMarshal();
+  }
+
   /** {@inheritdoc IProofService.generateAuthV2Proof} */
   async generateAuthV2Proof(challenge: Uint8Array, did: DID): Promise<ZKProof> {
-    const authInputs = await this.generateAuthV2Inputs(challenge, did, CircuitId.AuthV2);
+    const authInputs = await this.generateAuthInputs(challenge, did, CircuitId.AuthV2);
 
     const zkProof = await this._prover.generate(authInputs, CircuitId.AuthV2);
     return zkProof;
@@ -512,15 +620,28 @@ export class ProofService implements IProofService {
       acceptedStateTransitionDelay: PROTOCOL_CONSTANTS.DEFAULT_AUTH_VERIFY_DELAY
     }
   ): Promise<boolean> {
-    if (circuitId !== CircuitId.AuthV2) {
+    if (
+      circuitId !== CircuitId.AuthV2 &&
+      circuitId !== CircuitId.AuthV3 &&
+      circuitId !== CircuitId.AuthV3_8_32
+    ) {
       throw new Error(`CircuitId is not supported ${circuitId}`);
     }
 
-    const authV2PubSignals = new AuthV2PubSignals().pubSignalsUnmarshal(
-      byteEncoder.encode(JSON.stringify(pubSignals))
-    );
-    const gistRoot = authV2PubSignals.GISTRoot.bigInt();
-    const userId = authV2PubSignals.userID.bigInt();
+    let gistRoot, userId;
+    if (circuitId === CircuitId.AuthV2) {
+      const authV2PubSignals = new AuthV2PubSignals().pubSignalsUnmarshal(
+        byteEncoder.encode(JSON.stringify(pubSignals))
+      );
+      gistRoot = authV2PubSignals.GISTRoot.bigInt();
+      userId = authV2PubSignals.userID.bigInt();
+    } else {
+      const authV3PubSignals = new AuthV3PubSignals().pubSignalsUnmarshal(
+        byteEncoder.encode(JSON.stringify(pubSignals))
+      );
+      gistRoot = authV3PubSignals.GISTRoot.bigInt();
+      userId = authV3PubSignals.userID.bigInt();
+    }
     const globalStateInfo = await this._stateStorage.getGISTRootInfo(gistRoot, userId);
 
     if (globalStateInfo.root !== gistRoot) {
@@ -554,7 +675,9 @@ export class ProofService implements IProofService {
     const credentials = await this._identityWallet.findOwnedCredentialsByDID(did, query);
 
     if (!credentials.length) {
-      throw new Error(`no credentials belong to did or its profiles`);
+      throw new Error(
+        VerifiableConstants.ERRORS.PROOF_SERVICE_NO_CREDENTIAL_FOR_IDENTITY_OR_PROFILE
+      );
     }
 
     //  For EQ / IN / NIN / LT / GT operations selective if credential satisfies query - we can get any.

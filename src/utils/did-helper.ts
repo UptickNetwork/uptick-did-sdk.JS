@@ -2,7 +2,7 @@ import { Hex } from '@iden3/js-crypto';
 import { Id, buildDIDType, genesisFromEthAddress, DID } from '@iden3/js-iden3-core';
 import { Hash } from '@iden3/js-merkletree';
 import { DIDResolutionResult, VerificationMethod, DIDResolutionMetadata } from 'did-resolver';
-import { keccak256 } from 'js-sha3';
+import { keccak256 } from 'ethers';
 import { hexToBytes } from './encoding';
 
 /**
@@ -143,6 +143,12 @@ export const resolveDidDocument = async (
   }
 };
 
+const _buildDIDFromEthAddress = (didType: Uint8Array, ethAddress: Uint8Array): DID => {
+  const genesis = genesisFromEthAddress(ethAddress);
+  const identifier = new Id(didType, genesis);
+  return DID.parseFromId(identifier);
+};
+
 export const buildDIDFromEthPubKey = (didType: Uint8Array, pubKeyEth: string): DID => {
   // Use Keccak-256 hash function to get public key hash
   const hashOfPublicKey = keccak256(hexToBytes(pubKeyEth));
@@ -151,7 +157,9 @@ export const buildDIDFromEthPubKey = (didType: Uint8Array, pubKeyEth: string): D
   // Ethereum Address is '0x' concatenated with last 20 bytes
   // of the public key hash
   const ethAddr = ethAddressBuffer.slice(-20);
-  const genesis = genesisFromEthAddress(ethAddr);
-  const identifier = new Id(didType, genesis);
-  return DID.parseFromId(identifier);
+  return _buildDIDFromEthAddress(didType, ethAddr);
+};
+
+export const buildDIDFromEthAddress = (didType: Uint8Array, ethAddress: string): DID => {
+  return _buildDIDFromEthAddress(didType, hexToBytes(ethAddress));
 };
