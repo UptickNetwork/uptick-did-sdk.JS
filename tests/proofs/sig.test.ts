@@ -19,7 +19,7 @@ import { RootInfo, StateProof } from '../../src/storage/entities/state';
 import path from 'path';
 import { byteEncoder } from '../../src';
 import { ZeroKnowledgeProofRequest } from '../../src/iden3comm';
-import { Blockchain, DID, DidMethod, NetworkId } from '@iden3/js-iden3-core';
+import { Blockchain, DID, DidMethod, NetworkId } from '@uptickproject/js-iden3-core';
 import { describe, expect, it, beforeEach } from 'vitest';
 import { CredentialStatusResolverRegistry } from '../../src/credentials';
 import { RHSResolver } from '../../src/credentials';

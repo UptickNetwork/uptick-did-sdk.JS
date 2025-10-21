@@ -10,7 +10,7 @@ import {
 import { BasicMessage, DIDDocument, IPacker, PackerParams, VerificationMethod } from '../types';
 import { parseAcceptProfile, resolveVerificationMethods } from '../utils';
 import { KMS, KmsKeyType } from '../../kms';
-import { DID } from '@iden3/js-iden3-core';
+import { DID } from '@uptickproject/js-iden3-core';
 import { decodeProtectedHeader, GeneralJWE, JWEHeaderParameters } from 'jose';
 
 export type RecipientInfo = {

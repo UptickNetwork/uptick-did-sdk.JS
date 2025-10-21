@@ -16,7 +16,7 @@ import {
   BasicHandlerOptions,
   IProtocolMessageHandler
 } from './message-handler';
-import { getUnixTimestamp } from '@iden3/js-iden3-core';
+import { getUnixTimestamp } from '@uptickproject/js-iden3-core';
 import { verifyExpiresTime } from './common';
 
 /**

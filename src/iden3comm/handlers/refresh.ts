@@ -5,7 +5,7 @@ import { CredentialIssuanceMessage, CredentialRefreshMessage, IPackageManager } 
 
 import { RefreshServiceType, W3CCredential } from '../../verifiable';
 import { byteEncoder } from '../../utils';
-import { DID } from '@iden3/js-iden3-core';
+import { DID } from '@uptickproject/js-iden3-core';
 import { ICredentialWallet } from '../../credentials';
 import * as uuid from 'uuid';
 import { defaultProvingMethodAlg } from './message-handler';

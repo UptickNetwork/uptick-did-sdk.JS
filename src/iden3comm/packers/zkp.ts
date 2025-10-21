@@ -10,7 +10,7 @@ import {
 } from '../types';
 import { Token, Header, ProvingMethodAlg, proving } from '@iden3/js-jwz';
 import { AuthV2PubSignals, AuthV3PubSignals, CircuitId } from '../../circuits/index';
-import { BytesHelper, DID } from '@iden3/js-iden3-core';
+import { BytesHelper, DID } from '@uptickproject/js-iden3-core';
 import {
   ErrNoProvingMethodAlg,
   ErrPackedWithUnsupportedCircuit,

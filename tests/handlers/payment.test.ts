@@ -37,7 +37,7 @@ import {
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import path from 'path';
 import { MediaType, PROTOCOL_MESSAGE_TYPE } from '../../src/iden3comm/constants';
-import { BytesHelper, DID, getUnixTimestamp } from '@iden3/js-iden3-core';
+import { BytesHelper, DID, getUnixTimestamp } from '@uptickproject/js-iden3-core';
 import {
   createPayment,
   createPaymentRequest,

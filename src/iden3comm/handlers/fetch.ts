@@ -15,7 +15,7 @@ import { W3CCredential } from '../../verifiable';
 import { ICredentialWallet, getUserDIDFromCredential } from '../../credentials';
 
 import { byteDecoder, byteEncoder } from '../../utils';
-import { DID } from '@iden3/js-iden3-core';
+import { DID } from '@uptickproject/js-iden3-core';
 import * as uuid from 'uuid';
 import {
   AbstractMessageHandler,

@@ -1,4 +1,4 @@
-import { DID, Id, chainIDfromDID } from '@iden3/js-iden3-core';
+import { DID, Id, chainIDfromDID } from '@uptickproject/js-iden3-core';
 import { Contract, ethers } from 'ethers';
 import { INonMerklizedIssuerABI as abi } from '@iden3/onchain-non-merklized-issuer-base-abi';
 import { Options } from '@iden3/js-jsonld-merklization';

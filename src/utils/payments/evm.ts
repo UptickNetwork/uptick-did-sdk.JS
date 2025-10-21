@@ -6,7 +6,7 @@ import {
   MultiChainPaymentConfigOption
 } from '../../iden3comm';
 import { PaymentRequestDataType, SupportedPaymentProofType } from '../../verifiable';
-import { getUnixTimestamp } from '@iden3/js-iden3-core';
+import { getUnixTimestamp } from '@uptickproject/js-iden3-core';
 import { Resolvable } from 'did-resolver';
 
 /**

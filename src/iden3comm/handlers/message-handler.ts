@@ -5,7 +5,7 @@ import { ContractMessageHandlerOptions } from './contract-request';
 import { PaymentHandlerOptions, PaymentRequestMessageHandlerOptions } from './payment';
 import { MediaType } from '../constants';
 import { ProvingMethodAlg, Token, proving } from '@iden3/js-jwz';
-import { DID } from '@iden3/js-iden3-core';
+import { DID } from '@uptickproject/js-iden3-core';
 import { verifyExpiresTime } from './common';
 import { byteDecoder } from '../../utils';
 

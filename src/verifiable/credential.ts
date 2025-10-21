@@ -13,7 +13,7 @@ import {
   IdPosition,
   ClaimOptions,
   getChainId
-} from '@iden3/js-iden3-core';
+} from '@uptickproject/js-iden3-core';
 import { Proof, Hash, rootFromProof, verifyProof } from '@iden3/js-merkletree';
 import { Merklizer, Options } from '@iden3/js-jsonld-merklization';
 import { PublicKey, poseidon } from '@iden3/js-crypto';

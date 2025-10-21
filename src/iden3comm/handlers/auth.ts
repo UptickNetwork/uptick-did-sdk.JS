@@ -12,7 +12,7 @@ import {
   JSONObject,
   Attachment
 } from '../types';
-import { DID, getUnixTimestamp } from '@iden3/js-iden3-core';
+import { DID, getUnixTimestamp } from '@uptickproject/js-iden3-core';
 import { ProvingMethodAlg, proving } from '@iden3/js-jwz';
 
 import * as uuid from 'uuid';

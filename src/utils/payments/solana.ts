@@ -12,7 +12,7 @@ import {
   SupportedPaymentProofType
 } from '../../verifiable';
 import { byteEncoder, bytesToHex } from '../encoding';
-import { getUnixTimestamp } from '@iden3/js-iden3-core';
+import { getUnixTimestamp } from '@uptickproject/js-iden3-core';
 import { Keypair, PublicKey } from '@solana/web3.js';
 import { Resolvable } from 'did-resolver';
 

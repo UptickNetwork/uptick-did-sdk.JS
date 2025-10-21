@@ -12,7 +12,7 @@ import {
 } from '../../utils';
 import { PROTOCOL_CONSTANTS } from '..';
 import { p384 } from '@noble/curves/p384';
-import { BytesHelper } from '@iden3/js-iden3-core';
+import { BytesHelper } from '@uptickproject/js-iden3-core';
 
 const DIDAuthenticationSection = 'authentication';
 export const resolveVerificationMethods = (didDocument: DIDDocument): VerificationMethod[] => {

@@ -2,7 +2,7 @@ import { PROTOCOL_MESSAGE_TYPE } from '../constants';
 import { MediaType } from '../constants';
 import { BasicMessage, IPackageManager, PackerParams } from '../types';
 
-import { DID, getUnixTimestamp } from '@iden3/js-iden3-core';
+import { DID, getUnixTimestamp } from '@uptickproject/js-iden3-core';
 import * as uuid from 'uuid';
 import { buildSolanaPayment, byteEncoder, verifyIden3SolanaPaymentRequest } from '../../utils';
 import {

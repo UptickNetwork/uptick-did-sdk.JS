@@ -10,7 +10,7 @@ import {
   getInMemoryDataStorage,
   registerKeyProvidersInMemoryKMS
 } from '../../helpers';
-import { DID } from '@iden3/js-iden3-core';
+import { DID } from '@uptickproject/js-iden3-core';
 import { schemaLoaderForTests } from '../../mocks/schema';
 
 describe('SparseMerkleTreeProof', () => {

@@ -61,7 +61,7 @@ import {
 import { proving } from '@iden3/js-jwz';
 import * as uuid from 'uuid';
 import { MediaType, PROTOCOL_MESSAGE_TYPE } from '../../src/iden3comm/constants';
-import { Blockchain, BytesHelper, DID, DidMethod, NetworkId } from '@iden3/js-iden3-core';
+import { Blockchain, BytesHelper, DID, DidMethod, NetworkId } from '@uptickproject/js-iden3-core';
 import { describe, expect, it, beforeEach } from 'vitest';
 import { CredentialStatusResolverRegistry } from '../../src/credentials';
 import { RHSResolver } from '../../src/credentials';

@@ -16,7 +16,7 @@ import {
 import abi from './abi/ZkpVerifier.json';
 import { IVerifierABI } from '@iden3/universal-verifier-v2-abi';
 import { TransactionService } from '../../blockchain';
-import { BytesHelper, chainIDfromDID, DID, Id } from '@iden3/js-iden3-core';
+import { BytesHelper, chainIDfromDID, DID, Id } from '@uptickproject/js-iden3-core';
 import {
   AtomicQueryMTPV2OnChainPubSignals,
   AtomicQuerySigV2OnChainPubSignals,

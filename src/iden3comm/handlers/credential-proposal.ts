@@ -8,7 +8,7 @@ import {
   IPackageManager
 } from '../types';
 
-import { DID, getUnixTimestamp } from '@iden3/js-iden3-core';
+import { DID, getUnixTimestamp } from '@uptickproject/js-iden3-core';
 import * as uuid from 'uuid';
 import {
   Proposal,

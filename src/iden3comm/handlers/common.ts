@@ -15,7 +15,7 @@ import {
 } from '../types';
 import { mergeObjects } from '../../utils';
 import { RevocationStatus, VerifiableConstants, W3CCredential } from '../../verifiable';
-import { DID, getUnixTimestamp } from '@iden3/js-iden3-core';
+import { DID, getUnixTimestamp } from '@uptickproject/js-iden3-core';
 import { IProofService } from '../../proof';
 import { CircuitId } from '../../circuits';
 import { AcceptJwsAlgorithms, defaultAcceptProfile, MediaType } from '../constants';
